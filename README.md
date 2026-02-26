@@ -331,6 +331,52 @@ StellarAid Blockchain Layer is built with:
 - On-chain withdrawal system
 - Asset‑agnostic design
 
+## 💰 Fee Estimation System
+
+StellarAid includes a comprehensive **fee estimation service** that provides accurate transaction fee calculations, surge pricing detection, and multi-currency conversion.
+
+### Features
+
+- **Real-time Fee Estimation**: Fetch current base fees from Stellar Horizon
+- **Surge Pricing Detection**: 4-level detection (Normal, Elevated, High, Critical)
+- **Multi-Currency Display**: Convert fees to 10+ supported currencies
+- **Caching**: 5-minute TTL cache to reduce API calls
+- **Fee History Tracking**: 1000+ records for analytics and trend detection
+
+### Quick Start
+
+```rust
+use fee::FeeEstimationService;
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let service = FeeEstimationService::public_horizon();
+    
+    // Estimate fee for 2-operation donation
+    let fee_info = service.estimate_fee(2).await?;
+    println!("Fee: {:.8} XLM", fee_info.total_fee_xlm);
+    
+    // Check for surge pricing
+    if fee_info.is_surge_pricing {
+        println!("⚠️ Network surging at {}%!", fee_info.surge_percent as i64);
+    }
+    
+    Ok(())
+}
+```
+
+### Documentation
+
+- **[Fee Estimation Guide](./FEE_ESTIMATION.md)**: Comprehensive API reference and architecture
+- **[Integration Guide](./DONATION_MODAL_INTEGRATION.md)**: How to integrate with donation modal
+- **[Summary](./FEE_SUMMARY.md)**: Implementation details and test coverage
+
+### Key Constants
+
+- **Base Fee**: 100 stroops (0.00001 XLM)
+- **Conversion**: 1 XLM = 10,000,000 stroops
+- **Cache TTL**: 300 seconds (5 minutes)
+
 # 📌 How to Contribute
 
 ### 1. Fork the Repository
