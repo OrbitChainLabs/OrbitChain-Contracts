@@ -1,8 +1,9 @@
 #![no_std]
-use soroban_sdk::{contract, contractimpl, Address, Env};
+use soroban_sdk::{contract, contractimpl, Address, Env, String};
 
 pub mod assets;
 pub mod validation;
+pub mod events;
 
 #[contract]
 pub struct CoreContract;
@@ -13,6 +14,44 @@ impl CoreContract {
 
     pub fn ping(_env: Env) -> u32 {
         1
+    }
+
+    /// Record a donation and emit the DonationReceived event
+    pub fn donate(
+        env: Env,
+        donor: Address,
+        amount: i128,
+        asset: String,
+    ) -> i128 {
+        // Emit the DonationReceived event
+        events::DonationReceived {
+            donor: donor.clone(),
+            amount,
+            asset: asset.clone(),
+            timestamp: env.ledger().timestamp(),
+        }
+        .emit(&env);
+
+        amount
+    }
+
+    /// Process a withdrawal and emit the WithdrawalProcessed event
+    pub fn withdraw(
+        env: Env,
+        recipient: Address,
+        amount: i128,
+        asset: String,
+    ) -> i128 {
+        // Emit the WithdrawalProcessed event
+        events::WithdrawalProcessed {
+            recipient: recipient.clone(),
+            amount,
+            asset: asset.clone(),
+            timestamp: env.ledger().timestamp(),
+        }
+        .emit(&env);
+
+        amount
     }
 }
 
