@@ -8,6 +8,7 @@
 //! - Reduced String allocations
 
 use soroban_sdk::{contracttype, symbol_short, Address, Env, String, Vec, Symbol};
+use crate::rbac::Rbac;
 
 /// Storage keys for asset configuration (optimized with symbols)
 #[contracttype]
@@ -160,27 +161,19 @@ impl AssetConfig {
     
     /// Update the asset admin (admin only)
     pub fn update_admin(env: &Env, caller: &Address, new_admin: &Address) -> Result<(), &'static str> {
-        Self::verify_admin(env, caller)?;
-        env.storage().instance().set(&AssetStorageKey::AssetAdmin, new_admin);
+        Rbac::update_admin(env, caller, new_admin);
         Ok(())
     }
     
     /// Get the current admin
     pub fn get_admin(env: &Env) -> Option<Address> {
-        env.storage().instance().get(&AssetStorageKey::AssetAdmin)
+        Rbac::get_admin(env)
     }
-    
-    /// Verify that the caller is the admin
+
+    /// Verify that the caller is the admin and has authorized the operation
     fn verify_admin(env: &Env, caller: &Address) -> Result<(), &'static str> {
-        if let Some(admin) = Self::get_admin(env) {
-            if caller == &admin {
-                Ok(())
-            } else {
-                Err("Unauthorized - caller is not admin")
-            }
-        } else {
-            Err("Admin not set")
-        }
+        Rbac::require_admin_auth(env, caller);
+        Ok(())
     }
 }
 
@@ -206,6 +199,7 @@ mod tests {
     #[test]
     fn test_add_asset() {
         let env = Env::default();
+        env.mock_all_auths();
         let admin = Address::generate(&env);
         AssetConfig::init(&env, &admin);
         
@@ -220,6 +214,7 @@ mod tests {
     #[test]
     fn test_remove_asset() {
         let env = Env::default();
+        env.mock_all_auths();
         let admin = Address::generate(&env);
         AssetConfig::init(&env, &admin);
         
@@ -232,14 +227,14 @@ mod tests {
     }
     
     #[test]
+    #[should_panic(expected = "Unauthorized: caller is not admin")]
     fn test_unauthorized_access() {
         let env = Env::default();
         let admin = Address::generate(&env);
         let other = Address::generate(&env);
         AssetConfig::init(&env, &admin);
         
-        // Try to add asset as non-admin
-        let result = AssetConfig::add_asset(&env, &other, "BTC");
-        assert!(result.is_err());
+        // Try to add asset as non-admin - should panic now
+        let _ = AssetConfig::add_asset(&env, &other, "BTC");
     }
 }
