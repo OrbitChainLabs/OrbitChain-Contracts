@@ -15,7 +15,14 @@ pub mod surge_pricing;
 
 // Re-export frequently used types
 pub use cache::{CacheMetadata, CachedFeeData, FeeCache};
-pub use calculator::{calculate_fee, stroops_to_xlm, xlm_to_stroops, FeeConfig, FeeInfo};
+pub use calculator::{
+    calculate_fee, stroops_to_xlm, xlm_to_stroops, FeeConfig, FeeInfo,
+    // Utility functions
+    estimate_payment_fee, estimate_donation_fee, estimate_multisig_setup_fee,
+    estimate_contract_invocation_fee, estimate_fee_xlm, format_fee_xlm,
+    format_fee_stroops, percentage_above_base, is_fee_acceptable,
+    estimate_time_to_fee_reduction, calculate_surge_percent,
+};
 pub use currency::{Currency, CurrencyConverter, ExchangeRate, FormattedAmount};
 pub use error::{FeeError, FeeResult};
 pub use history::{FeeHistory, FeeRecord, FeeStats};

@@ -152,6 +152,88 @@ pub fn calculate_surge_percent(current_fee: i64, normal_fee: i64) -> f64 {
     (current_fee as f64 / normal_fee as f64) * 100.0
 }
 
+// --- Utility Functions ---
+
+/// Estimate fee for a simple payment (1 operation)
+pub fn estimate_payment_fee(base_fee_stroops: i64) -> FeeResult<i64> {
+    calculate_fee(base_fee_stroops, 1)
+}
+
+/// Estimate fee for a payment with a memo (1 operation)
+pub fn estimate_payment_with_memo_fee(base_fee_stroops: i64) -> FeeResult<i64> {
+    // Memo doesn't add operations, just data
+    calculate_fee(base_fee_stroops, 1)
+}
+
+/// Estimate fee for a typical donation (payment + contract call)
+pub fn estimate_donation_fee(base_fee_stroops: i64) -> FeeResult<i64> {
+    // Donation requires: payment operation + contract invocation
+    calculate_fee(base_fee_stroops, 2)
+}
+
+/// Estimate fee for a complex transaction (payment + multi-sig setup)
+pub fn estimate_multisig_setup_fee(base_fee_stroops: i64) -> FeeResult<i64> {
+    // Multi-sig: multiple set_options operations
+    calculate_fee(base_fee_stroops, 3)
+}
+
+/// Estimate fee for contract invocation
+pub fn estimate_contract_invocation_fee(base_fee_stroops: i64, num_operations: u32) -> FeeResult<i64> {
+    if num_operations == 0 {
+        return Err(FeeError::InvalidOperationCount(
+            "contract invocations require at least 1 operation".to_string(),
+        ));
+    }
+    calculate_fee(base_fee_stroops, num_operations)
+}
+
+/// Estimate fee in XLM for a transaction
+pub fn estimate_fee_xlm(base_fee_stroops: i64, operation_count: u32) -> FeeResult<f64> {
+    let stroops = calculate_fee(base_fee_stroops, operation_count)?;
+    Ok(stroops_to_xlm(stroops))
+}
+
+/// Format fee in XLM with specified decimal places
+pub fn format_fee_xlm(fee_stroops: i64, decimals: usize) -> String {
+    let xlm = stroops_to_xlm(fee_stroops);
+    format!("{:.prec$} XLM", xlm, prec = decimals)
+}
+
+/// Format fee in stroops with thousands separator
+pub fn format_fee_stroops(fee_stroops: i64) -> String {
+    format!("{:,} stroops", fee_stroops)
+}
+
+/// Calculate percentage increase from base fee
+pub fn percentage_above_base(current_fee: i64) -> f64 {
+    let base = BASE_FEE_STROOPS;
+    if base == 0 {
+        return 0.0;
+    }
+    ((current_fee - base) as f64 / base as f64) * 100.0
+}
+
+/// Check if fee is within acceptable range
+pub fn is_fee_acceptable(fee_stroops: i64, max_acceptable_xlm: f64) -> bool {
+    let fee_xlm = stroops_to_xlm(fee_stroops);
+    fee_xlm <= max_acceptable_xlm
+}
+
+/// Estimate time to next fee reduction (simple heuristic)
+/// Returns minutes estimated until fees drop
+pub fn estimate_time_to_fee_reduction(current_fee: i64, trend_analysis: bool) -> u32 {
+    if trend_analysis && current_fee > BASE_FEE_STROOPS * 2 {
+        // Heavy congestion: estimate 15-30 minutes
+        (15 + (current_fee / 1000) as u32).min(30)
+    } else if current_fee > BASE_FEE_STROOPS {
+        // Moderate congestion: estimate 5-15 minutes
+        (5 + (current_fee / 500) as u32).min(15)
+    } else {
+        // Normal: no wait needed
+        0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -253,5 +335,95 @@ mod tests {
         // total_fee_xlm == 0.0001; threshold uses strict `>`
         assert!(!fee_info.exceeds_threshold(0.0001));
         assert!(fee_info.exceeds_threshold(0.00005));
+    }
+
+    // Utility function tests
+
+    #[test]
+    fn test_estimate_payment_fee() {
+        let fee = estimate_payment_fee(100).unwrap();
+        assert_eq!(fee, 100);
+    }
+
+    #[test]
+    fn test_estimate_donation_fee() {
+        let fee = estimate_donation_fee(100).unwrap();
+        assert_eq!(fee, 200); // 2 operations
+    }
+
+    #[test]
+    fn test_estimate_multisig_setup_fee() {
+        let fee = estimate_multisig_setup_fee(100).unwrap();
+        assert_eq!(fee, 300); // 3 operations
+    }
+
+    #[test]
+    fn test_estimate_contract_invocation_fee() {
+        let fee = estimate_contract_invocation_fee(100, 1).unwrap();
+        assert_eq!(fee, 100);
+
+        let fee = estimate_contract_invocation_fee(100, 5).unwrap();
+        assert_eq!(fee, 500);
+    }
+
+    #[test]
+    fn test_estimate_fee_xlm() {
+        let fee_xlm = estimate_fee_xlm(100, 1).unwrap();
+        assert_eq!(fee_xlm, 0.00001);
+
+        let fee_xlm = estimate_fee_xlm(100, 2).unwrap();
+        assert_eq!(fee_xlm, 0.00002);
+    }
+
+    #[test]
+    fn test_format_fee_xlm() {
+        let formatted = format_fee_xlm(100, 8);
+        assert_eq!(formatted, "0.00001000 XLM");
+
+        let formatted = format_fee_xlm(10_000_000, 2);
+        assert_eq!(formatted, "1.00 XLM");
+    }
+
+    #[test]
+    fn test_format_fee_stroops() {
+        let formatted = format_fee_stroops(1_000);
+        assert_eq!(formatted, "1,000 stroops");
+
+        let formatted = format_fee_stroops(100);
+        assert_eq!(formatted, "100 stroops");
+    }
+
+    #[test]
+    fn test_percentage_above_base() {
+        let percent = percentage_above_base(100);
+        assert_eq!(percent, 0.0); // Normal fee
+
+        let percent = percentage_above_base(200);
+        assert_eq!(percent, 100.0); // 100% above normal
+
+        let percent = percentage_above_base(150);
+        assert_eq!(percent, 50.0); // 50% above normal
+    }
+
+    #[test]
+    fn test_is_fee_acceptable() {
+        assert!(is_fee_acceptable(100, 0.0001)); // 0.00001 XLM
+        assert!(!is_fee_acceptable(100_000, 0.00001)); // 0.01 XLM
+
+        let acceptable_fee = xlm_to_stroops(0.001);
+        assert!(is_fee_acceptable(acceptable_fee - 1, 0.001));
+        assert!(!is_fee_acceptable(acceptable_fee + 1, 0.001));
+    }
+
+    #[test]
+    fn test_estimate_time_to_fee_reduction() {
+        let time = estimate_time_to_fee_reduction(100, false);
+        assert_eq!(time, 0); // Normal fee, no wait
+
+        let time = estimate_time_to_fee_reduction(200, false);
+        assert!(time > 0); // Elevated fee, some wait expected
+
+        let time = estimate_time_to_fee_reduction(500, true);
+        assert!(time > 10); // Severe congestion with trend, significant wait
     }
 }
