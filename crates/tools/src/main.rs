@@ -13,6 +13,7 @@ mod horizon_error;
 mod horizon_rate_limit;
 mod horizon_retry;
 mod transaction_submission;
+mod transaction_verification;
 mod wallet_signing;
 
 use config::{Config, Network};
@@ -21,6 +22,7 @@ use transaction_submission::{
     SubmissionConfig, SubmissionLogger, SubmissionRequest, SubmissionResponse,
     TransactionSubmissionService,
 };
+use transaction_verification::{TransactionVerificationService, VerificationRequest};
 use wallet_signing::{
     CompleteSigningRequest, PrepareSigningRequest, SigningStatus, WalletSigningService, WalletType,
 };
@@ -185,6 +187,18 @@ enum Commands {
         #[arg(long, default_value = ".transaction_submissions.jsonl")]
         log_file: String,
     },
+    /// Verify a transaction on-chain via Horizon
+    VerifyTx {
+        /// 64-character hex transaction hash to verify
+        #[arg(long)]
+        hash: String,
+        /// Network to query (testnet, mainnet)
+        #[arg(short, long, default_value = "testnet")]
+        network: String,
+        /// Verification timeout in seconds
+        #[arg(long, default_value_t = 30)]
+        timeout_seconds: u64,
+    },
 }
 
 #[derive(Subcommand)]
@@ -337,6 +351,13 @@ fn main() -> Result<()> {
             log_file,
         } => {
             show_submission_status(detailed, tx_hash.as_deref(), &log_file)?;
+        },
+        Commands::VerifyTx {
+            hash,
+            network,
+            timeout_seconds,
+        } => {
+            verify_transaction(&hash, &network, timeout_seconds)?;
         },
     }
 
@@ -892,6 +913,79 @@ fn submit_transaction(
                 eprintln!("   Error Code: {}", code);
             }
             eprintln!("   Attempts: {}", response.attempts);
+            std::process::exit(1);
+        }
+    }
+
+    Ok(())
+}
+
+/// Verify a transaction on-chain by querying Horizon
+fn verify_transaction(hash: &str, network: &str, timeout_seconds: u64) -> Result<()> {
+    use std::time::Duration;
+    use transaction_verification::VerificationConfig;
+
+    println!("Verifying transaction on {}...", network);
+    println!("  Hash: {}", hash);
+
+    let config = match network {
+        "testnet" => VerificationConfig::testnet(),
+        "mainnet" => VerificationConfig::mainnet(),
+        _ => {
+            eprintln!("Unknown network: {}. Use 'testnet' or 'mainnet'", network);
+            std::process::exit(1);
+        }
+    }
+    .with_timeout(Duration::from_secs(timeout_seconds));
+
+    let service = TransactionVerificationService::with_config(config)
+        .map_err(|e| anyhow::anyhow!("Failed to create verification service: {}", e))?;
+
+    let request = VerificationRequest::new(hash).with_timeout(Duration::from_secs(timeout_seconds));
+
+    let runtime = tokio::runtime::Runtime::new()?;
+    let response = runtime
+        .block_on(service.verify(request))
+        .map_err(|e| anyhow::anyhow!("Verification error: {}", e))?;
+
+    // Display result
+    match response.status {
+        transaction_verification::VerificationStatus::Confirmed => {
+            println!("Transaction confirmed on-chain!");
+            if let Some(ledger) = response.ledger_sequence {
+                println!("  Ledger: {}", ledger);
+            }
+            if let Some(time) = &response.ledger_close_time {
+                println!("  Ledger Close Time: {}", time);
+            }
+            if let Some(fee) = &response.fee_charged {
+                println!("  Fee Charged (stroops): {}", fee);
+            }
+            if let Some(contract) = &response.contract_result {
+                println!("  Contract Execution: success={}", contract.success);
+                if let Some(xdr) = &contract.return_value_xdr {
+                    println!("  Return Value XDR: {}", xdr);
+                }
+                if !contract.events.is_empty() {
+                    println!("  Contract Events: {}", contract.events.len());
+                }
+                if !contract.operation_results.is_empty() {
+                    println!("  Operations: {}", contract.operation_results.len());
+                }
+            }
+        }
+        transaction_verification::VerificationStatus::Failed => {
+            eprintln!("Transaction is on-chain but failed!");
+            if let Some(code) = &response.result_code {
+                eprintln!("  Result Code: {}", code);
+            }
+            if let Some(msg) = &response.error_message {
+                eprintln!("  Reason: {}", msg);
+            }
+            std::process::exit(1);
+        }
+        transaction_verification::VerificationStatus::NotFound => {
+            eprintln!("Transaction not found on {}.", network);
             std::process::exit(1);
         }
     }

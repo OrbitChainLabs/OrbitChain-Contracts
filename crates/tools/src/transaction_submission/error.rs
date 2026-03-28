@@ -305,7 +305,9 @@ impl SubmissionError {
                 message: response_body.to_string(),
                 reason_code: "tx_malformed".to_string(),
             },
-            404 => SubmissionError::NotFound,
+            404 => SubmissionError::Unknown {
+                message: "Transaction or endpoint not found (HTTP 404)".to_string(),
+            },
             429 => SubmissionError::RateLimited {
                 retry_after: Duration::from_secs(60),
             },
