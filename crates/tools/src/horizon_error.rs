@@ -4,6 +4,7 @@
 
 use std::time::Duration;
 use reqwest::StatusCode;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// Errors that can occur during Horizon API interactions
@@ -95,7 +96,7 @@ pub enum HorizonError {
 }
 
 /// Horizon error severity levels for prioritizing responses
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ErrorSeverity {
     /// Critical errors requiring immediate attention
     Critical,
@@ -184,6 +185,57 @@ impl HorizonError {
             HorizonError::Other(_) => "other",
         }
     }
+
+    /// Canonical code for the error (machine-readable)
+    pub fn error_code(&self) -> &'static str {
+        match self {
+            HorizonError::NetworkError(_) => "network_error",
+            HorizonError::ConnectionRefused(_) => "connection_refused",
+            HorizonError::ConnectionReset(_) => "connection_reset",
+            HorizonError::DnsError(_) => "dns_error",
+            HorizonError::Timeout { .. } => "timeout",
+            HorizonError::RateLimited { .. } => "rate_limited",
+            HorizonError::HttpError { .. } => "http_error",
+            HorizonError::NotFound(_) => "not_found",
+            HorizonError::BadRequest(_) => "bad_request",
+            HorizonError::Unauthorized(_) => "unauthorized",
+            HorizonError::Forbidden(_) => "forbidden",
+            HorizonError::InvalidRequest(_) => "invalid_request",
+            HorizonError::InvalidResponse(_) => "invalid_response",
+            HorizonError::ServerError { .. } => "server_error",
+            HorizonError::ServiceUnavailable(_) => "service_unavailable",
+            HorizonError::TlsError(_) => "tls_error",
+            HorizonError::CacheError(_) => "cache_error",
+            HorizonError::InvalidConfig(_) => "invalid_config",
+            HorizonError::UrlError(_) => "url_parse_error",
+            HorizonError::JsonError(_) => "json_parse_error",
+            HorizonError::Other(_) => "other",
+        }
+    }
+
+    /// Suggested retry delay value in seconds
+    pub fn retry_after_seconds(&self) -> Option<u64> {
+        match self {
+            HorizonError::RateLimited { retry_after } => Some(retry_after.as_secs()),
+            OutlookError::ServerError { .. } => Some(5),
+            HorizonError::ServiceUnavailable(_) => Some(10),
+            HorizonError::Timeout { duration } => Some(duration.as_secs()),
+            _ => None,
+        }
+    }
+
+    /// Standardized error response structure for API consumption.
+    pub fn to_response(&self) -> HorizonErrorResponse {
+        HorizonErrorResponse {
+            code: self.error_code().to_string(),
+            category: self.category().to_string(),
+            severity: format!("{:?}", self.severity()),
+            message: self.to_string(),
+            details: Some(self.error_context()),
+            retry_after_seconds: self.retry_after_seconds(),
+        }
+    }
+
     /// Check if this error is retryable
     pub fn is_retryable(&self) -> bool {
         matches!(
