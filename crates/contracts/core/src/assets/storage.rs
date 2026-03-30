@@ -134,16 +134,12 @@ impl AssetConfig {
             .map_err(|_| "Invalid asset code")?;
         
         let mut assets = Self::get_supported_assets_symbols(env);
-        
-        // Check if already supported
-        if assets.contains(&asset_symbol) {
-            return Err("Asset already supported");
+        if !assets.contains(&asset_symbol) {
+            assets.push_back(asset_symbol.clone());
+            env.storage().instance().set(&AssetStorageKey::SupportedAssets, &assets);
         }
         
-        assets.push_back(asset_symbol.clone());
-        env.storage().instance().set(&AssetStorageKey::SupportedAssets, &assets);
-        
-        // Store the contract address
+        // Always allow the token contract mapping to be configured or updated.
         env.storage().instance().set(&AssetStorageKey::AssetContract(asset_symbol), &contract_address);
         
         Ok(())
