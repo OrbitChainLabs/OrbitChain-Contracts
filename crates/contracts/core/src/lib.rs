@@ -41,6 +41,16 @@ fn total_tx_key() -> Symbol {
     symbol_short!("totaltx")
 }
 
+/// Issue #145 – global donation counter key (counts every successful `donate` call)
+fn total_donations_key() -> Symbol {
+    symbol_short!("totaldon")
+}
+
+/// Issue #145 – global withdrawal-request counter key (counts every successful `withdraw` call)
+fn total_withdrawals_key() -> Symbol {
+    symbol_short!("totalwd")
+}
+
 // ── Events ───────────────────────────────────────────────────────────────────
 
 #[contracttype]
@@ -109,6 +119,50 @@ pub struct DonationMetadata {
     pub amount: i128,
     pub memo: String,
     pub timestamp: u64,
+}
+
+// ── Analytics & reporting types ──────────────────────────────────────────────
+
+/// Issue #147 – per-campaign report combining stored campaign data with
+/// derived statistics (funding progress, donor count, donation count).
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CampaignReport {
+    pub campaign_id: u64,
+    pub creator: Address,
+    pub title: Symbol,
+    pub goal: i128,
+    pub raised: i128,
+    /// `goal - raised`, clamped to 0 when the campaign is fully funded.
+    pub remaining: i128,
+    /// Funding progress in basis points (0-10_000, where 10_000 == 100%).
+    /// Using bps avoids floating-point in `no_std` and keeps the value lossless.
+    pub progress_bps: u32,
+    pub deadline: u64,
+    pub active: bool,
+    pub donor_count: u32,
+    pub donation_count: u32,
+}
+
+/// Issue #146 – platform-wide summary suitable for export.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlatformSummary {
+    pub total_campaigns: u64,
+    pub total_donations: u64,
+    pub total_withdrawals: u64,
+    pub total_transactions: u64,
+}
+
+/// Issue #148 – aggregate metrics returned by the dashboard analytics API.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DashboardMetrics {
+    pub total_campaigns: u64,
+    pub active_campaigns: u64,
+    pub total_donations: u64,
+    pub total_withdrawals: u64,
+    pub total_transactions: u64,
 }
 
 // ── Contract ─────────────────────────────────────────────────────────────────
@@ -266,6 +320,17 @@ impl StellarAidContract {
             .get(&total_tx_key())
             .unwrap_or(0);
         env.storage().instance().set(&total_tx_key(), &(tx_count + 1));
+
+        // Issue #145 – increment dedicated donation counter so it can be queried
+        // independently of withdrawals.
+        let donation_count: u64 = env
+            .storage()
+            .instance()
+            .get(&total_donations_key())
+            .unwrap_or(0);
+        env.storage()
+            .instance()
+            .set(&total_donations_key(), &(donation_count + 1));
     }
 
     /// Get campaign details
@@ -402,6 +467,17 @@ impl StellarAidContract {
             .unwrap_or(0);
         env.storage().instance().set(&total_tx_key(), &(tx_count + 1));
 
+        // Issue #145 – increment dedicated withdrawal counter so it can be queried
+        // independently of donations.
+        let withdrawal_count: u64 = env
+            .storage()
+            .instance()
+            .get(&total_withdrawals_key())
+            .unwrap_or(0);
+        env.storage()
+            .instance()
+            .set(&total_withdrawals_key(), &(withdrawal_count + 1));
+
         env.events().publish(
             (Symbol::new(&env, "WithdrawalRequested"), creator, campaign_id),
             (recipient, amount),
@@ -501,6 +577,123 @@ impl StellarAidContract {
             .instance()
             .get(&total_tx_key())
             .unwrap_or(0)
+    }
+
+    // ── Analytics & reporting (issues #145, #146, #147, #148) ────────────────────────────
+
+    /// Issue #145 – total number of campaigns ever created (DB entry count for campaigns).
+    pub fn get_campaign_count(env: Env) -> u64 {
+        env.storage()
+            .instance()
+            .get(&symbol_short!("count"))
+            .unwrap_or(0)
+    }
+
+    /// Issue #145 – total number of donation entries recorded across all campaigns.
+    pub fn get_total_donations(env: Env) -> u64 {
+        env.storage()
+            .instance()
+            .get(&total_donations_key())
+            .unwrap_or(0)
+    }
+
+    /// Issue #145 – total number of withdrawal requests recorded across all campaigns.
+    pub fn get_total_withdrawals(env: Env) -> u64 {
+        env.storage()
+            .instance()
+            .get(&total_withdrawals_key())
+            .unwrap_or(0)
+    }
+
+    /// Issue #147 – build a per-campaign report including funding progress, donor
+    /// count and donation count. Returns `None` if the campaign does not exist.
+    pub fn get_campaign_report(env: Env, campaign_id: u64) -> Option<CampaignReport> {
+        let campaign: Campaign = env
+            .storage()
+            .persistent()
+            .get(&campaign_key(campaign_id))?;
+
+        // Donor count (issue #101 storage)
+        let donors: Vec<Address> = env
+            .storage()
+            .persistent()
+            .get(&donors_key(campaign_id))
+            .unwrap_or_else(|| vec![&env]);
+
+        // Donation count (issue #104 storage)
+        let history: Vec<DonationRecord> = env
+            .storage()
+            .persistent()
+            .get(&history_key(campaign_id))
+            .unwrap_or_else(|| vec![&env]);
+
+        // Funding progress (basis points, 0-10_000) and remaining-to-goal.
+        let (progress_bps, remaining) = if campaign.goal <= 0 {
+            (0u32, 0i128)
+        } else if campaign.raised >= campaign.goal {
+            (10_000u32, 0i128)
+        } else if campaign.raised <= 0 {
+            (0u32, campaign.goal)
+        } else {
+            let bps = (campaign.raised * 10_000) / campaign.goal;
+            (bps as u32, campaign.goal - campaign.raised)
+        };
+
+        Some(CampaignReport {
+            campaign_id: campaign.id,
+            creator: campaign.creator,
+            title: campaign.title,
+            goal: campaign.goal,
+            raised: campaign.raised,
+            remaining,
+            progress_bps,
+            deadline: campaign.deadline,
+            active: campaign.active,
+            donor_count: donors.len(),
+            donation_count: history.len(),
+        })
+    }
+
+    /// Issue #146 – generate a platform-wide summary of all stored entries.
+    /// Acts as the export-friendly aggregate of every counter the contract maintains.
+    pub fn get_platform_summary(env: Env) -> PlatformSummary {
+        PlatformSummary {
+            total_campaigns: Self::get_campaign_count(env.clone()),
+            total_donations: Self::get_total_donations(env.clone()),
+            total_withdrawals: Self::get_total_withdrawals(env.clone()),
+            total_transactions: Self::get_total_tx_count(env),
+        }
+    }
+
+    /// Issue #148 – dashboard analytics endpoint returning aggregate metrics,
+    /// including a derived `active_campaigns` count.
+    pub fn get_dashboard_metrics(env: Env) -> DashboardMetrics {
+        let total_campaigns = Self::get_campaign_count(env.clone());
+
+        // Walk every stored campaign once to count active ones. Cheap because
+        // it only reads instance/persistent storage already paid for.
+        let mut active_campaigns: u64 = 0;
+        let mut id: u64 = 1;
+        while id <= total_campaigns {
+            if let Some(c) = env
+                .storage()
+                .persistent()
+                .get::<_, Campaign>(&campaign_key(id))
+            {
+                if c.active {
+                    active_campaigns += 1;
+                }
+            }
+            id += 1;
+        }
+
+        DashboardMetrics {
+            total_campaigns,
+            active_campaigns,
+            total_donations: Self::get_total_donations(env.clone()),
+            total_withdrawals: Self::get_total_withdrawals(env.clone()),
+            total_transactions: Self::get_total_tx_count(env),
+        }
     }
 }
 
@@ -692,5 +885,187 @@ mod tests {
         let recipient = Address::generate(&env);
         client.withdraw(&creator, &cid, &recipient, &500);
         assert_eq!(client.get_total_tx_count(), 2);
+    }
+
+    // ── Analytics & reporting tests (issues #145, #146, #147, #148) ────────────────────
+
+    /// Helper: bootstrap a contract with admin + N campaigns and return the IDs.
+    fn setup_with_campaigns(env: &Env, n: u32) -> (StellarAidContractClient<'_>, Address, Address, Vec<u64>) {
+        env.mock_all_auths();
+        let contract_id = env.register_contract(None, StellarAidContract);
+        let client = StellarAidContractClient::new(env, &contract_id);
+        let admin = Address::generate(env);
+        client.initialize(&admin);
+        let creator = Address::generate(env);
+
+        let mut ids: Vec<u64> = vec![env];
+        for _ in 0..n {
+            let cid = client.create_campaign(&creator, &symbol_short!("test"), &10000, &9999999);
+            ids.push_back(cid);
+        }
+        (client, admin, creator, ids)
+    }
+
+    /// Issue #145 – dedicated donation/withdrawal counters increment correctly
+    /// and stay in sync with the total tx counter.
+    #[test]
+    fn test_count_total_transactions_split() {
+        let env = Env::default();
+        let (client, _admin, creator, ids) = setup_with_campaigns(&env, 1);
+        let cid = ids.get(0).unwrap();
+
+        assert_eq!(client.get_campaign_count(), 1);
+        assert_eq!(client.get_total_donations(), 0);
+        assert_eq!(client.get_total_withdrawals(), 0);
+        assert_eq!(client.get_total_tx_count(), 0);
+
+        let xlm = symbol_short!("XLM");
+        let memo = String::from_str(&env, "memo");
+        let donor_a = Address::generate(&env);
+        let donor_b = Address::generate(&env);
+        client.donate(&donor_a, &cid, &1000, &xlm, &memo);
+        client.donate(&donor_b, &cid, &2000, &xlm, &memo);
+        client.donate(&donor_a, &cid, &500, &xlm, &memo);
+
+        assert_eq!(client.get_total_donations(), 3);
+        assert_eq!(client.get_total_withdrawals(), 0);
+        assert_eq!(client.get_total_tx_count(), 3);
+
+        let recipient = Address::generate(&env);
+        client.withdraw(&creator, &cid, &recipient, &500);
+
+        assert_eq!(client.get_total_donations(), 3);
+        assert_eq!(client.get_total_withdrawals(), 1);
+        assert_eq!(client.get_total_tx_count(), 4);
+    }
+
+    /// Issue #147 – per-campaign report carries accurate stats and progress %.
+    #[test]
+    fn test_get_campaign_report_accuracy() {
+        let env = Env::default();
+        let (client, _admin, _creator, ids) = setup_with_campaigns(&env, 1);
+        let cid = ids.get(0).unwrap();
+
+        // Empty campaign → progress 0, donor/donation count 0, remaining == goal.
+        let r0 = client.get_campaign_report(&cid).unwrap();
+        assert_eq!(r0.campaign_id, cid);
+        assert_eq!(r0.goal, 10_000);
+        assert_eq!(r0.raised, 0);
+        assert_eq!(r0.remaining, 10_000);
+        assert_eq!(r0.progress_bps, 0);
+        assert_eq!(r0.donor_count, 0);
+        assert_eq!(r0.donation_count, 0);
+        assert!(r0.active);
+
+        let xlm = symbol_short!("XLM");
+        let memo = String::from_str(&env, "memo");
+        let donor_a = Address::generate(&env);
+        let donor_b = Address::generate(&env);
+
+        // Two donors, three donations → net raised = (1000-100) + (2000-100) + (500-100) = 3200
+        client.donate(&donor_a, &cid, &1000, &xlm, &memo);
+        client.donate(&donor_b, &cid, &2000, &xlm, &memo);
+        client.donate(&donor_a, &cid, &500, &xlm, &memo);
+
+        let r1 = client.get_campaign_report(&cid).unwrap();
+        assert_eq!(r1.raised, 3200);
+        assert_eq!(r1.remaining, 6800);
+        // 3200 / 10_000 == 32% == 3200 bps
+        assert_eq!(r1.progress_bps, 3200);
+        assert_eq!(r1.donor_count, 2);
+        assert_eq!(r1.donation_count, 3);
+
+        // Non-existent campaign → None
+        assert!(client.get_campaign_report(&9999).is_none());
+    }
+
+    /// Issue #147 – progress is clamped to 100% (10_000 bps) when fully funded.
+    #[test]
+    fn test_campaign_report_progress_clamped() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let contract_id = env.register_contract(None, StellarAidContract);
+        let client = StellarAidContractClient::new(&env, &contract_id);
+        let admin = Address::generate(&env);
+        client.initialize(&admin);
+        let creator = Address::generate(&env);
+        // Tiny goal so a single donation overshoots it.
+        let cid = client.create_campaign(&creator, &symbol_short!("tiny"), &500, &9999999);
+
+        let donor = Address::generate(&env);
+        let xlm = symbol_short!("XLM");
+        let memo = String::from_str(&env, "memo");
+        client.donate(&donor, &cid, &10_000, &xlm, &memo); // raised = 9_900 ≫ 500
+
+        let r = client.get_campaign_report(&cid).unwrap();
+        assert_eq!(r.progress_bps, 10_000);
+        assert_eq!(r.remaining, 0);
+    }
+
+    /// Issue #146 – platform summary aggregates all counters faithfully.
+    #[test]
+    fn test_get_platform_summary() {
+        let env = Env::default();
+        let (client, _admin, creator, ids) = setup_with_campaigns(&env, 2);
+        let cid1 = ids.get(0).unwrap();
+        let cid2 = ids.get(1).unwrap();
+
+        let xlm = symbol_short!("XLM");
+        let memo = String::from_str(&env, "memo");
+        let donor = Address::generate(&env);
+        client.donate(&donor, &cid1, &1000, &xlm, &memo);
+        client.donate(&donor, &cid2, &2000, &xlm, &memo);
+        let recipient = Address::generate(&env);
+        client.withdraw(&creator, &cid1, &recipient, &200);
+
+        let summary = client.get_platform_summary();
+        assert_eq!(summary.total_campaigns, 2);
+        assert_eq!(summary.total_donations, 2);
+        assert_eq!(summary.total_withdrawals, 1);
+        assert_eq!(summary.total_transactions, 3);
+    }
+
+    /// Issue #148 – dashboard metrics return active-campaign count and platform totals.
+    #[test]
+    fn test_get_dashboard_metrics() {
+        let env = Env::default();
+        let (client, _admin, _creator, ids) = setup_with_campaigns(&env, 3);
+
+        let metrics0 = client.get_dashboard_metrics();
+        assert_eq!(metrics0.total_campaigns, 3);
+        assert_eq!(metrics0.active_campaigns, 3);
+        assert_eq!(metrics0.total_donations, 0);
+        assert_eq!(metrics0.total_withdrawals, 0);
+        assert_eq!(metrics0.total_transactions, 0);
+
+        // Drive a donation into one campaign and check counters propagate.
+        let xlm = symbol_short!("XLM");
+        let memo = String::from_str(&env, "memo");
+        let donor = Address::generate(&env);
+        let cid = ids.get(0).unwrap();
+        client.donate(&donor, &cid, &1000, &xlm, &memo);
+
+        let metrics1 = client.get_dashboard_metrics();
+        assert_eq!(metrics1.total_donations, 1);
+        assert_eq!(metrics1.total_transactions, 1);
+        assert_eq!(metrics1.active_campaigns, 3);
+    }
+
+    /// Issue #148 – dashboard metrics on a fresh, empty contract are all zero.
+    #[test]
+    fn test_dashboard_metrics_empty_contract() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let contract_id = env.register_contract(None, StellarAidContract);
+        let client = StellarAidContractClient::new(&env, &contract_id);
+        let admin = Address::generate(&env);
+        client.initialize(&admin);
+
+        let metrics = client.get_dashboard_metrics();
+        assert_eq!(metrics.total_campaigns, 0);
+        assert_eq!(metrics.active_campaigns, 0);
+        assert_eq!(metrics.total_donations, 0);
+        assert_eq!(metrics.total_withdrawals, 0);
+        assert_eq!(metrics.total_transactions, 0);
     }
 }
