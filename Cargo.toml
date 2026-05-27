@@ -1,21 +1,10 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/contracts/core",
-    "crates/tools",
+    "campaign",
+    "token-bridge",
+    "common",
 ]
 
-[workspace.package]
-version = "0.1.0"
-edition = "2021"
-rust-version = "1.78"
-license = "MIT"
-
 [workspace.dependencies]
-soroban-sdk = "21.0.0"
-stellar-strkey = "0.0.8"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-tokio = { version = "1.0", features = ["full"] }
-anyhow = "1.0"
-dotenv = "0.15"
+soroban-sdk = { version = "26.0.1" }

@@ -1,10 +1,2 @@
 [build]
-target = "wasm32-unknown-unknown"
-
-[target.wasm32-unknown-unknown]
-rustflags = [
-    "-C", "opt-level=z",
-    "-C", "codegen-units=1",
-    "-C", "strip=symbols",
-]
-
+target = "wasm32v1-none"

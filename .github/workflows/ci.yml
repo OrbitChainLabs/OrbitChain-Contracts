@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32v1-none
+          components: rustfmt, clippy
+
+      - run: cargo fmt --all --check
+
+      - run: cargo clippy --all-targets --target x86_64-unknown-linux-gnu -- -D warnings
+
+      - run: cargo test --all --target x86_64-unknown-linux-gnu
+
+      - name: WASM build
+        run: cargo build --target wasm32v1-none --release --all
+
+      - name: Report contract sizes
+        run: |
+          find target/wasm32v1-none/release -maxdepth 1 -name "*.wasm" \
+            -exec sh -c 'echo "$(basename $1): $(wc -c < $1) bytes"' _ {} \;
