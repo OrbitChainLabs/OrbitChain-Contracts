@@ -26,3 +26,7 @@ Thumbs.db
 # Soroban
 .stellar/
 soroban.toml
+
+# Deployment records (contain network-specific contract IDs; committed per-env as needed)
+deployments/*.json
+.stellaraid_contract_id
