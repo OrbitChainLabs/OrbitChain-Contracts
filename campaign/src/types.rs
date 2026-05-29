@@ -1,28 +1,34 @@
-use soroban_sdk::{contracttype, Address, BytesN, Vec};
+use soroban_sdk::{contracttype, contracterror, Address, BytesN, Vec};
 
 // ── Error enum ──────────────────────────────────────────────────────────────
 
-/// All error types for validation and state transitions
-#[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
+/// All error types for validation and state transitions.
+/// Uses `contracterror` so variants map to u32 codes and `env.panic_with_error` works.
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Error {
     // ── Initialization validation errors ──
-    InvalidGoalAmount,        // goal_amount must be > 0
-    InvalidEndTime,           // end_time must be > current ledger timestamp
-    InvalidAssets,            // accepted_assets must be non-empty
-    InvalidAssetCode,         // asset_code must be non-empty and valid
-    InvalidMilestones,        // milestones must be sorted ascending and last must equal goal
-    MilestoneMismatch,        // last milestone.target_amount != goal_amount
-    InvalidMilestoneCount,    // milestone count must be 1-5
-    AlreadyInitialized,       // campaign already initialized
-    UnauthorizedCreator,      // caller is not the creator or lacks authorization
-    
+    InvalidGoalAmount        = 1,  // goal_amount must be > 0
+    InvalidEndTime           = 2,  // end_time must be > current ledger timestamp
+    InvalidAssets            = 3,  // accepted_assets must be non-empty
+    InvalidAssetCode         = 4,  // asset_code must be non-empty and valid
+    InvalidMilestones        = 5,  // milestones must be sorted ascending and last must equal goal
+    MilestoneMismatch        = 6,  // last milestone.target_amount != goal_amount
+    InvalidMilestoneCount    = 7,  // milestone count must be 1-5
+    AlreadyInitialized       = 8,  // campaign already initialized
+    UnauthorizedCreator      = 9,  // caller is not the creator or lacks authorization
+
     // ── State transition errors ──
-    InvalidCampaignTransition, // campaign status transition not allowed
-    InvalidMilestoneTransition,// milestone status transition not allowed
-    CampaignNotActive,        // campaign must be Active to accept donations
-    CampaignEnded,            // campaign end_time has passed
-    GoalNotReached,           // cannot transition to GoalReached before reaching goal
+    InvalidCampaignTransition  = 10, // campaign status transition not allowed
+    InvalidMilestoneTransition = 11, // milestone status transition not allowed
+    CampaignNotActive          = 12, // campaign must be Active to accept donations
+    CampaignEnded              = 13, // campaign end_time has passed
+    GoalNotReached             = 14, // cannot transition to GoalReached before reaching goal
+
+    // ── Runtime errors ──
+    NotInitialized       = 15, // campaign has not been initialized yet
+    AssetNotAccepted     = 16, // donated asset is not in campaign's accepted_assets
+    InvalidDonationAmount = 17, // donation amount must be > 0
 }
 
 // ── Supporting enums ─────────────────────────────────────────────────────────
@@ -57,17 +63,16 @@ pub enum MilestoneStatus {
 
 // ── Contract events ──────────────────────────────────────────────────────────
 
-/// Campaign lifecycle events
+/// Emitted by `initialize`. Stored as a `contracttype` struct so it can be
+/// passed as event data via `env.events().publish(...)`.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum CampaignEvent {
-    Initialized {
-        creator: Address,
-        goal_amount: i128,
-        end_time: u64,
-        asset_count: u32,
-        milestone_count: u32,
-    },
+pub struct CampaignInitializedEvent {
+    pub creator: Address,
+    pub goal_amount: i128,
+    pub end_time: u64,
+    pub asset_count: u32,
+    pub milestone_count: u32,
 }
 
 /// Reusable struct for Stellar asset representation
@@ -77,19 +82,22 @@ pub enum CampaignEvent {
 pub struct StellarAsset {
     /// Asset code (e.g., "XLM", "USDC", "EUR")
     pub asset_code: soroban_sdk::String,
-    /// Issuer address; None for native XLM
+    /// Issuer address; None for native XLM (display only — transfers need a contract address)
     pub issuer: Option<Address>,
 }
 
 impl StellarAsset {
-    /// Helper function to check if this asset is native XLM
+    /// Returns true when this asset is native XLM (no issuer set).
     pub fn is_xlm(&self) -> bool {
         self.issuer.is_none()
     }
 }
 
-/// Accepted asset descriptor (native XLM or a Stellar asset)
-/// Deprecated: Use StellarAsset instead
+/// Accepted asset descriptor (native XLM or a Stellar SEP-41 token).
+/// Used in the `donate` function signature.
+///   Native         – identifies XLM; the XLM entry in `accepted_assets` must
+///                    carry the wrapped native contract address in its `issuer`.
+///   Stellar(addr)  – `addr` is the token contract address directly.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AssetInfo {

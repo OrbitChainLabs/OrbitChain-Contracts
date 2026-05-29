@@ -3,9 +3,12 @@
 pub mod storage;
 pub mod types;
 
-use soroban_sdk::{contract, contractimpl, Env, Vec};
-use types::{CampaignData, CampaignStatus, Error, MilestoneData, MilestoneStatus, StellarAsset, CampaignEvent};
-use storage::{get_campaign, set_campaign, set_milestone};
+use soroban_sdk::{contract, contractimpl, token, Address, Env, Vec};
+use types::{
+    AssetInfo, CampaignData, CampaignInitializedEvent, CampaignStatus, DonorRecord, Error,
+    MilestoneData, MilestoneStatus, StellarAsset,
+};
+use storage::{get_campaign, get_donor, set_campaign, set_donor, set_milestone};
 
 pub const VERSION: u32 = 1;
 
@@ -20,18 +23,15 @@ impl CampaignContract {
     /// Can only be called once per contract instance
     ///
     /// # Panics
-    /// - `Error::UnauthorizedCreator` if caller is not the creator or lacks authorization
-    /// - `Error::AlreadyInitialized` if campaign already exists
-    /// - `Error::InvalidGoalAmount` if goal_amount <= 0
-    /// - `Error::InvalidEndTime` if end_time <= current ledger timestamp
-    /// - `Error::InvalidAssets` if accepted_assets is empty
-    /// - `Error::InvalidAssetCode` if any asset_code is empty or invalid
+    /// - `Error::UnauthorizedCreator`   if caller is not the creator
+    /// - `Error::AlreadyInitialized`    if campaign already exists
+    /// - `Error::InvalidGoalAmount`     if goal_amount <= 0
+    /// - `Error::InvalidEndTime`        if end_time <= current ledger timestamp
+    /// - `Error::InvalidAssets`         if accepted_assets is empty
+    /// - `Error::InvalidAssetCode`      if any asset_code is empty
     /// - `Error::InvalidMilestoneCount` if milestone count is not 1-5
-    /// - `Error::InvalidMilestones` if milestones are not sorted ascending by target_amount
-    /// - `Error::MilestoneMismatch` if last milestone.target_amount != goal_amount
-    ///
-    /// # Events
-    /// Emits `campaign_initialized` event with campaign details
+    /// - `Error::InvalidMilestones`     if milestones are not sorted ascending
+    /// - `Error::MilestoneMismatch`     if last milestone.target_amount != goal_amount
     pub fn initialize(
         env: Env,
         creator: soroban_sdk::Address,
@@ -40,43 +40,34 @@ impl CampaignContract {
         accepted_assets: Vec<StellarAsset>,
         milestones: Vec<MilestoneData>,
     ) -> Result<(), Error> {
-        // Authorization check: creator must authorize this call
         creator.require_auth();
 
-        // Check if already initialized - can only initialize once
         if get_campaign(&env).is_some() {
             panic_with_error(&env, Error::AlreadyInitialized);
         }
 
-        // Validation 1: goal_amount > 0
         if goal_amount <= 0 {
             panic_with_error(&env, Error::InvalidGoalAmount);
         }
 
-        // Validation 2: end_time > current ledger timestamp
         let current_timestamp = env.ledger().timestamp();
         if end_time <= current_timestamp {
             panic_with_error(&env, Error::InvalidEndTime);
         }
 
-        // Validation 3: accepted_assets non-empty
         if accepted_assets.is_empty() {
             panic_with_error(&env, Error::InvalidAssets);
         }
 
-        // Validation 3b: validate each asset code
         validate_assets(&env, &accepted_assets)?;
 
-        // Validation 4: milestone count must be 1-5
         let milestone_count = milestones.len() as u32;
         if milestone_count == 0 || milestone_count > types::MAX_MILESTONES {
             panic_with_error(&env, Error::InvalidMilestoneCount);
         }
 
-        // Validation 5 & 6: milestones sorted ascending and last == goal_amount
         validate_milestones(&env, &milestones, goal_amount)?;
 
-        // All validations passed, store campaign data
         let campaign = CampaignData {
             creator: creator.clone(),
             goal_amount,
@@ -89,22 +80,90 @@ impl CampaignContract {
 
         set_campaign(&env, &campaign);
 
-        // Store each milestone
         for (index, milestone) in milestones.iter().enumerate() {
-            set_milestone(&env, index as u32, milestone);
+            set_milestone(&env, index as u32, &milestone);
         }
 
-        // Emit campaign_initialized event
-        let event = CampaignEvent::Initialized {
-            creator,
-            goal_amount,
-            end_time,
-            asset_count: accepted_assets.len() as u32,
-            milestone_count,
-        };
-        env.events().publish(("campaign", "initialized"), event);
+        env.events().publish(
+            ("campaign", "initialized"),
+            CampaignInitializedEvent {
+                creator,
+                goal_amount,
+                end_time,
+                asset_count: accepted_assets.len() as u32,
+                milestone_count,
+            },
+        );
 
         Ok(())
+    }
+
+    /// Issue #174 – read-only view of full campaign state; no auth required.
+    pub fn get_campaign_info(env: Env) -> CampaignData {
+        get_campaign(&env).unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized))
+    }
+
+    /// Issue #176 + #177 – accept a donation in native XLM or any SEP-41 token.
+    ///
+    /// For `AssetInfo::Native` (XLM): the XLM entry in `accepted_assets` must
+    /// carry the wrapped native token contract address in `StellarAsset.issuer`.
+    /// For `AssetInfo::Stellar(addr)`: `addr` is the token contract address.
+    ///
+    /// # Panics
+    /// - `Error::InvalidDonationAmount` if amount <= 0
+    /// - `Error::NotInitialized`        if campaign not yet initialized
+    /// - `Error::CampaignNotActive`     if status is not Active or GoalReached
+    /// - `Error::CampaignEnded`         if current timestamp > campaign end_time
+    /// - `Error::AssetNotAccepted`      if asset not in accepted_assets
+    pub fn donate(env: Env, donor: Address, amount: i128, asset: AssetInfo) {
+        donor.require_auth();
+
+        if amount <= 0 {
+            panic_with_error(&env, Error::InvalidDonationAmount);
+        }
+
+        let mut campaign =
+            get_campaign(&env).unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
+
+        if campaign.status != CampaignStatus::Active
+            && campaign.status != CampaignStatus::GoalReached
+        {
+            panic_with_error(&env, Error::CampaignNotActive);
+        }
+
+        let now = env.ledger().timestamp();
+        if now > campaign.end_time {
+            panic_with_error(&env, Error::CampaignEnded);
+        }
+
+        let token_addr = get_token_address_for_asset(&env, &asset, &campaign);
+
+        token::Client::new(&env, &token_addr).transfer(
+            &donor,
+            &env.current_contract_address(),
+            &amount,
+        );
+
+        campaign.raised_amount += amount;
+        set_campaign(&env, &campaign);
+
+        let record = match get_donor(&env, &donor) {
+            Some(mut existing) => {
+                existing.total_donated += amount;
+                existing.last_donation_time = now;
+                existing
+            }
+            None => DonorRecord {
+                donor: donor.clone(),
+                total_donated: amount,
+                asset: asset.clone(),
+                last_donation_time: now,
+            },
+        };
+        set_donor(&env, &donor, &record);
+
+        env.events()
+            .publish(("donation", "received"), (donor, amount, asset));
     }
 
     pub fn hello(env: Env) -> soroban_sdk::Symbol {
@@ -116,11 +175,54 @@ impl CampaignContract {
     }
 }
 
-/// Helper function to validate Stellar assets
-/// Ensures each asset has a non-empty asset_code
+/// Issue #175 – assert the current invoker is the campaign creator.
+///
+/// Reads the creator address from campaign storage and calls `require_auth()`.
+/// Panics with `Error::UnauthorizedCreator` if the campaign is not initialized;
+/// Soroban's auth framework panics if the invoker is not the creator.
+fn require_creator(env: &Env) {
+    let campaign =
+        get_campaign(env).unwrap_or_else(|| panic_with_error(env, Error::UnauthorizedCreator));
+    campaign.creator.require_auth();
+}
+
+/// Validates that `asset` is in the campaign's accepted list and returns the
+/// token contract address needed to construct a `token::Client`.
+///
+/// - `AssetInfo::Stellar(addr)` → `addr` must match an accepted asset's issuer.
+/// - `AssetInfo::Native` (XLM) → finds the XLM entry by asset_code and uses its issuer.
+fn get_token_address_for_asset(
+    env: &Env,
+    asset: &AssetInfo,
+    campaign: &CampaignData,
+) -> Address {
+    match asset {
+        AssetInfo::Stellar(addr) => {
+            let accepted = campaign
+                .accepted_assets
+                .iter()
+                .any(|a| a.issuer == Some(addr.clone()));
+            if !accepted {
+                panic_with_error(env, Error::AssetNotAccepted);
+            }
+            addr.clone()
+        }
+        AssetInfo::Native => {
+            // Find the XLM entry in accepted_assets by asset_code == "XLM".
+            // Its issuer must hold the wrapped native token contract address.
+            let xlm_code = soroban_sdk::String::from_str(env, "XLM");
+            campaign
+                .accepted_assets
+                .iter()
+                .find(|a| a.asset_code == xlm_code)
+                .and_then(|a| a.issuer.clone())
+                .unwrap_or_else(|| panic_with_error(env, Error::AssetNotAccepted))
+        }
+    }
+}
+
 fn validate_assets(env: &Env, assets: &Vec<StellarAsset>) -> Result<(), Error> {
     for asset in assets.iter() {
-        // asset_code must be non-empty
         if asset.asset_code.len() == 0 {
             panic_with_error(env, Error::InvalidAssetCode);
         }
@@ -128,13 +230,11 @@ fn validate_assets(env: &Env, assets: &Vec<StellarAsset>) -> Result<(), Error> {
     Ok(())
 }
 
-/// Helper function to validate milestone conditions
 fn validate_milestones(
     env: &Env,
     milestones: &Vec<MilestoneData>,
     goal_amount: i128,
 ) -> Result<(), Error> {
-    // Check if milestones are sorted ascending by target_amount
     for i in 1..milestones.len() {
         let prev = &milestones.get(i - 1).unwrap();
         let current = &milestones.get(i).unwrap();
@@ -144,7 +244,6 @@ fn validate_milestones(
         }
     }
 
-    // Check if last milestone.target_amount == goal_amount
     if let Some(last_milestone) = milestones.last() {
         if last_milestone.target_amount != goal_amount {
             panic_with_error(env, Error::MilestoneMismatch);
@@ -156,33 +255,18 @@ fn validate_milestones(
     Ok(())
 }
 
-/// Helper function to panic with a descriptive error message
+/// Panics the contract execution with the given error code.
+/// With `contracterror`, `Error` implements `Into<soroban_sdk::Error>` directly.
 fn panic_with_error(env: &Env, error: Error) -> ! {
-    let error_name = match error {
-        Error::InvalidGoalAmount => "InvalidGoalAmount",
-        Error::InvalidEndTime => "InvalidEndTime",
-        Error::InvalidAssets => "InvalidAssets",
-        Error::InvalidAssetCode => "InvalidAssetCode",
-        Error::InvalidMilestones => "InvalidMilestones",
-        Error::MilestoneMismatch => "MilestoneMismatch",
-        Error::InvalidMilestoneCount => "InvalidMilestoneCount",
-        Error::AlreadyInitialized => "AlreadyInitialized",
-        Error::UnauthorizedCreator => "UnauthorizedCreator",
-        Error::InvalidCampaignTransition => "InvalidCampaignTransition",
-        Error::InvalidMilestoneTransition => "InvalidMilestoneTransition",
-        Error::CampaignNotActive => "CampaignNotActive",
-        Error::CampaignEnded => "CampaignEnded",
-        Error::GoalNotReached => "GoalNotReached",
-    };
-    env.panic_with_error(soroban_sdk::Symbol::new(env, error_name))
+    env.panic_with_error(error)
 }
 
-/// Validates campaign status transitions and panics if invalid
-/// 
+/// Validates campaign status transitions; panics if invalid.
+///
 /// Valid transitions:
-///   Active -> GoalReached (when goal reached)
-///   Active -> Ended (when deadline passes)
-///   GoalReached -> Ended (when deadline passes)
+///   Active -> GoalReached (goal reached)
+///   Active -> Ended (deadline passes)
+///   GoalReached -> Ended (deadline passes)
 ///   Active/GoalReached/Ended -> Cancelled (by creator)
 pub fn validate_campaign_transition(
     env: &Env,
@@ -190,63 +274,44 @@ pub fn validate_campaign_transition(
     next_status: &CampaignStatus,
 ) -> Result<(), Error> {
     match (current_status, next_status) {
-        // Active can transition to GoalReached, Ended, or Cancelled
         (CampaignStatus::Active, CampaignStatus::GoalReached) => Ok(()),
         (CampaignStatus::Active, CampaignStatus::Ended) => Ok(()),
         (CampaignStatus::Active, CampaignStatus::Cancelled) => Ok(()),
-        
-        // GoalReached can transition to Ended or Cancelled
         (CampaignStatus::GoalReached, CampaignStatus::Ended) => Ok(()),
         (CampaignStatus::GoalReached, CampaignStatus::Cancelled) => Ok(()),
-        
-        // Ended can only transition to Cancelled
         (CampaignStatus::Ended, CampaignStatus::Cancelled) => Ok(()),
-        
-        // Cancelled is terminal
         (CampaignStatus::Cancelled, _) => {
             panic_with_error(env, Error::InvalidCampaignTransition);
         }
-        
-        // All other transitions are invalid
         _ => {
             panic_with_error(env, Error::InvalidCampaignTransition);
         }
     }
 }
 
-/// Validates milestone status transitions and panics if invalid
-/// 
+/// Validates milestone status transitions; panics if invalid.
+///
 /// Valid transitions:
-///   Locked -> Unlocked (when target_amount reached)
-///   Unlocked -> Released (when explicitly released)
-///   Locked -> Released (direct transition allowed)
+///   Locked -> Unlocked (target_amount reached)
+///   Unlocked -> Released (explicitly released)
+///   Locked -> Released (direct release)
 pub fn validate_milestone_transition(
     env: &Env,
     current_status: &MilestoneStatus,
     next_status: &MilestoneStatus,
 ) -> Result<(), Error> {
     match (current_status, next_status) {
-        // Locked can transition to Unlocked or Released
         (MilestoneStatus::Locked, MilestoneStatus::Unlocked) => Ok(()),
         (MilestoneStatus::Locked, MilestoneStatus::Released) => Ok(()),
-        
-        // Unlocked can transition to Released
         (MilestoneStatus::Unlocked, MilestoneStatus::Released) => Ok(()),
-        
-        // Released is terminal
         (MilestoneStatus::Released, _) => {
             panic_with_error(env, Error::InvalidMilestoneTransition);
         }
-        
-        // Prevent Unlocked -> Locked (going backwards)
         (MilestoneStatus::Unlocked, MilestoneStatus::Locked) => {
             panic_with_error(env, Error::InvalidMilestoneTransition);
         }
-        
-        // All other transitions are invalid
         _ => {
             panic_with_error(env, Error::InvalidMilestoneTransition);
         }
     }
 }
-
