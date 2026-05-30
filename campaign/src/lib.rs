@@ -3,8 +3,8 @@
 pub mod storage;
 pub mod types;
 
-use soroban_sdk::{contract, contractimpl, token, Address, Env, Vec};
-use types::{AssetInfo, CampaignData, CampaignStatus, Error, MilestoneData, MilestoneStatus, StellarAsset, CampaignEvent};
+use soroban_sdk::{contract, contractimpl, Address, Env, Vec};
+use types::{CampaignData, CampaignStatus, Error, MilestoneData, MilestoneStatus, StellarAsset, CampaignEvent, AssetInfo};
 use storage::{get_campaign, set_campaign, set_milestone};
 
 pub const VERSION: u32 = 1;
@@ -109,19 +109,20 @@ impl CampaignContract {
         Ok(())
     }
 
-    /// Issue #192 – Donate to the campaign, enforcing the minimum donation amount.
+    /// Issue #194 – Donate to the campaign, enforcing campaign status.
     ///
-    /// Panics with `Error::DonationTooSmall` if `amount < min_donation_amount` (when min > 0).
-    /// Set `min_donation_amount` to 0 during `initialize` to disable enforcement.
+    /// Panics with `Error::CampaignNotActive` unless status is `Active` or `GoalReached`.
+    /// The status check is atomic with the state update to prevent race conditions.
     pub fn donate(env: Env, donor: Address, amount: i128, _asset: AssetInfo) {
         donor.require_auth();
 
         let mut campaign: CampaignData = get_campaign(&env)
             .unwrap_or_else(|| panic_with_error(&env, Error::AlreadyInitialized));
 
-        // Issue #192 – enforce minimum donation amount
-        if campaign.min_donation_amount > 0 && amount < campaign.min_donation_amount {
-            panic_with_error(&env, Error::DonationTooSmall);
+        // Issue #194 – status check: only Active or GoalReached campaigns accept donations
+        match campaign.status {
+            CampaignStatus::Active | CampaignStatus::GoalReached => {}
+            _ => panic_with_error(&env, Error::CampaignNotActive),
         }
 
         campaign.raised_amount += amount;
