@@ -3,8 +3,8 @@
 pub mod storage;
 pub mod types;
 
-use soroban_sdk::{contract, contractimpl, Env, Vec};
-use types::{CampaignData, CampaignStatus, Error, MilestoneData, MilestoneStatus, StellarAsset, CampaignEvent};
+use soroban_sdk::{contract, contractimpl, token, Address, Env, Vec};
+use types::{AssetInfo, CampaignData, CampaignStatus, Error, MilestoneData, MilestoneStatus, StellarAsset, CampaignEvent};
 use storage::{get_campaign, set_campaign, set_milestone};
 
 pub const VERSION: u32 = 1;
@@ -105,6 +105,29 @@ impl CampaignContract {
         env.events().publish(("campaign", "initialized"), event);
 
         Ok(())
+    }
+
+    /// Issue #191 – Donate to the campaign using a SEP-41 compatible token.
+    ///
+    /// For `AssetInfo::Stellar(token_address)`, calls `token::Client::new(&env, &token_address).transfer()`
+    /// to move `amount` from `donor` to this contract. Native XLM donations are recorded without
+    /// an on-chain token transfer (handled externally via the Stellar network).
+    pub fn donate(env: Env, donor: Address, amount: i128, asset: AssetInfo) {
+        donor.require_auth();
+
+        let mut campaign: CampaignData = get_campaign(&env)
+            .unwrap_or_else(|| panic_with_error(&env, Error::AlreadyInitialized));
+
+        // SEP-41 token transfer for non-native assets
+        if let AssetInfo::Stellar(ref token_address) = asset {
+            token::Client::new(&env, token_address)
+                .transfer(&donor, &env.current_contract_address(), &amount);
+        }
+
+        campaign.raised_amount += amount;
+        set_campaign(&env, &campaign);
+
+        env.events().publish(("campaign", "donation_received"), (donor, amount));
     }
 
     pub fn hello(env: Env) -> soroban_sdk::Symbol {
