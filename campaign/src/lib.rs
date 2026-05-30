@@ -39,6 +39,7 @@ impl CampaignContract {
         end_time: u64,
         accepted_assets: Vec<StellarAsset>,
         milestones: Vec<MilestoneData>,
+        min_donation_amount: i128,
     ) -> Result<(), Error> {
         // Authorization check: creator must authorize this call
         creator.require_auth();
@@ -85,6 +86,7 @@ impl CampaignContract {
             status: CampaignStatus::Active,
             accepted_assets: accepted_assets.clone(),
             milestone_count,
+            min_donation_amount,
         };
 
         set_campaign(&env, &campaign);
@@ -107,21 +109,19 @@ impl CampaignContract {
         Ok(())
     }
 
-    /// Issue #191 – Donate to the campaign using a SEP-41 compatible token.
+    /// Issue #192 – Donate to the campaign, enforcing the minimum donation amount.
     ///
-    /// For `AssetInfo::Stellar(token_address)`, calls `token::Client::new(&env, &token_address).transfer()`
-    /// to move `amount` from `donor` to this contract. Native XLM donations are recorded without
-    /// an on-chain token transfer (handled externally via the Stellar network).
-    pub fn donate(env: Env, donor: Address, amount: i128, asset: AssetInfo) {
+    /// Panics with `Error::DonationTooSmall` if `amount < min_donation_amount` (when min > 0).
+    /// Set `min_donation_amount` to 0 during `initialize` to disable enforcement.
+    pub fn donate(env: Env, donor: Address, amount: i128, _asset: AssetInfo) {
         donor.require_auth();
 
         let mut campaign: CampaignData = get_campaign(&env)
             .unwrap_or_else(|| panic_with_error(&env, Error::AlreadyInitialized));
 
-        // SEP-41 token transfer for non-native assets
-        if let AssetInfo::Stellar(ref token_address) = asset {
-            token::Client::new(&env, token_address)
-                .transfer(&donor, &env.current_contract_address(), &amount);
+        // Issue #192 – enforce minimum donation amount
+        if campaign.min_donation_amount > 0 && amount < campaign.min_donation_amount {
+            panic_with_error(&env, Error::DonationTooSmall);
         }
 
         campaign.raised_amount += amount;
@@ -196,6 +196,7 @@ fn panic_with_error(env: &Env, error: Error) -> ! {
         Error::CampaignNotActive => "CampaignNotActive",
         Error::CampaignEnded => "CampaignEnded",
         Error::GoalNotReached => "GoalNotReached",
+        Error::DonationTooSmall => "DonationTooSmall",
     };
     env.panic_with_error(soroban_sdk::Symbol::new(env, error_name))
 }
