@@ -3,8 +3,8 @@
 pub mod storage;
 pub mod types;
 
-use soroban_sdk::{contract, contractimpl, Address, Env, Vec};
-use types::{CampaignData, CampaignStatus, Error, MilestoneData, MilestoneStatus, StellarAsset, CampaignEvent, AssetInfo};
+use soroban_sdk::{contract, contractimpl, token, Address, Env, Vec};
+use types::{AssetInfo, CampaignData, CampaignStatus, Error, MilestoneData, MilestoneStatus, StellarAsset, CampaignEvent};
 use storage::{get_campaign, set_campaign, set_milestone};
 
 pub const VERSION: u32 = 1;
