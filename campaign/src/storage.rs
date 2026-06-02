@@ -116,6 +116,38 @@ pub fn get_donor_or_default(env: &Env, donor: &Address) -> DonorRecord {
     })
 }
 
+// ─── Per-asset donor donations ────────────────────────────────────────────────
+
+/// Get the amount a donor has contributed in a specific asset.
+/// Returns 0 if no donations in that asset yet.
+pub fn get_donor_asset_donation(env: &Env, donor: &Address, asset: &Address) -> i128 {
+    let key = DataKey::DonorAssetDonation(donor.clone(), asset.clone());
+    let value: i128 = env
+        .storage()
+        .persistent()
+        .get(&key)
+        .unwrap_or(0);
+    bump_persistent(env, &key);
+    value
+}
+
+/// Add to a donor's contribution in a specific asset.
+/// Panics if the addition would overflow.
+pub fn increment_donor_asset_donation(env: &Env, donor: &Address, asset: &Address, amount: i128) {
+    let key = DataKey::DonorAssetDonation(donor.clone(), asset.clone());
+    let current: i128 = env
+        .storage()
+        .persistent()
+        .get(&key)
+        .unwrap_or(0);
+    
+    let new_amount = current.checked_add(amount)
+        .unwrap_or_else(|| panic_with_error!(env, Error::ArithmeticOverflow));
+    
+    env.storage().persistent().set(&key, &new_amount);
+    bump_persistent(env, &key);
+}
+
 // ─── Total raised ─────────────────────────────────────────────────────────────
 
 /// Load the global total-raised counter. Returns 0 before any donations.

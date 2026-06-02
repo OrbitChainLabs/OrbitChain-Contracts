@@ -6,7 +6,7 @@ pub mod types;
 
 use soroban_sdk::{contract, contractimpl, Address, Env, String, Vec};
 use types::{CampaignData, CampaignInitializedEvent, CampaignStatus, DonorRecord, Error, MilestoneData, MilestoneStatus, StellarAsset, AssetInfo};
-use storage::{get_campaign, set_campaign, get_milestone, set_milestone, get_donor, set_donor, get_total_raised as storage_get_total_raised, set_total_raised};
+use storage::{get_campaign, set_campaign, get_milestone, set_milestone, get_donor, set_donor, get_total_raised as storage_get_total_raised, set_total_raised, increment_donor_asset_donation, get_donor_asset_donation};
 
 pub const VERSION: u32 = 1;
 
@@ -151,6 +151,10 @@ impl CampaignContract {
             .unwrap_or_else(|| panic_with_error(&env, Error::Overflow));
         set_total_raised(&env, new_total);
 
+        // Track per-asset donation for pro-rata refund calculation
+        let asset_address = get_token_address_for_asset(&env, &asset, &campaign);
+        increment_donor_asset_donation(&env, &donor, &asset_address, amount);
+
         // Issue #195 – update donor record
         let mut donor_record = get_donor(&env, &donor).unwrap_or(DonorRecord {
             donor: donor.clone(),
@@ -207,13 +211,17 @@ impl CampaignContract {
 
     /// Check if a donor is eligible to claim a refund.
     ///
-    /// Returns `true` if:
-    /// - Campaign is in a terminal state (Ended or Cancelled)
-    /// - Goal was NOT reached (refunds only for failed campaigns)
-    /// - Current time is within the refund window (≤ 30 days after end_time)
-    /// - Donor has not already claimed a refund
+    /// A donor is refund-eligible if ALL of the following are true:
+    /// 1. Campaign is in terminal state (Ended or Cancelled)
+    /// 2. Refunds are allowed per campaign status:
+    ///    - `Cancelled`: always allow refunds
+    ///    - `Ended`: only if NO milestones have been Released yet
+    /// 3. Current time is within the refund window (≤ 30 days after end_time)
+    /// 4. Donor has never claimed a refund before
+    /// 5. Donor has made at least one donation
     ///
-    /// No auth required (view function).
+    /// This view function exposes the on-chain refund policy transparently.
+    /// No auth required (read-only).
     pub fn is_refund_eligible(env: Env, donor: Address) -> bool {
         let campaign = match get_campaign(&env) {
             Some(c) => c,
@@ -225,28 +233,36 @@ impl CampaignContract {
             None => return false,
         };
 
-        // Refunds only available when campaign is in terminal state
+        // Check 1: Campaign must be in terminal state
         if !campaign.status.is_terminal() {
             return false;
         }
 
-        // Refunds only for failed campaigns (Cancelled or Ended without goal)
-        if !campaign.status.allows_refunds() {
-            return false;
+        // Check 2: Refunds allowed based on campaign status
+        match campaign.status {
+            CampaignStatus::Cancelled => {
+                // Refunds always allowed for cancelled campaigns
+            }
+            CampaignStatus::Ended => {
+                // Refunds only if NO milestones have been released yet
+                for i in 0..campaign.milestone_count {
+                    if let Some(milestone) = get_milestone(&env, i) {
+                        if milestone.status == MilestoneStatus::Released {
+                            return false; // A milestone was already released
+                        }
+                    }
+                }
+            }
+            _ => return false, // Active and GoalReached are not terminal
         }
 
-        // For Ended status, goal must not have been reached
-        if campaign.status == CampaignStatus::Ended && campaign.goal_reached() {
-            return false;
-        }
-
-        // Check refund window: current_time <= end_time + REFUND_WINDOW
+        // Check 3: Current time within refund window (≤ end_time + REFUND_WINDOW)
         let current_time = env.ledger().timestamp();
         if current_time > campaign.end_time + REFUND_WINDOW {
             return false;
         }
 
-        // Donor must not have already claimed refund
+        // Check 4: Donor must not have already claimed refund
         if donor_record.refund_claimed {
             return false;
         }
@@ -256,13 +272,24 @@ impl CampaignContract {
 
     /// Claim a refund for a donation.
     ///
-    /// Transfers the donor's full donation amount back to them, proportionally
-    /// across all accepted assets. Marks the donor's refund_claimed flag as true.
+    /// Eligibility Rules (enforced in order):
+    /// 1. Campaign must be in a terminal state (Ended or Cancelled)
+    /// 2. For Cancelled campaigns: refund always available (if within window)
+    /// 3. For Ended campaigns: NO milestones must have been Released yet
+    /// 4. Current time must be within the 30-day refund window after end_time
+    /// 5. Donor must not have already claimed a refund
+    ///
+    /// Refund Calculation (Pro-rata):
+    /// - Total released = sum of released_amount across all milestones
+    /// - Refund % = (raised_amount - total_released) / raised_amount
+    /// - Per-asset refund = donor_asset_amount × refund%
+    ///
+    /// Each asset is transferred separately to the donor.
     ///
     /// # Panics
     /// - `Error::NotInitialized` if campaign not initialized
     /// - `Error::NoDonorRecord` if donor has never donated
-    /// - `Error::RefundNotPermitted` if campaign is not in terminal state or goal was reached
+    /// - `Error::RefundNotPermitted` if milestone already released
     /// - `Error::RefundWindowClosed` if current time > end_time + REFUND_WINDOW
     /// - `Error::RefundAlreadyClaimed` if donor already claimed refund
     pub fn claim_refund(env: Env, donor: Address) {
@@ -274,32 +301,85 @@ impl CampaignContract {
         let mut donor_record = get_donor(&env, &donor)
             .unwrap_or_else(|| panic_with_error(&env, Error::NoDonorRecord));
 
-        // Check campaign status allows refunds
-        if !campaign.status.allows_refunds() {
+        // Eligibility Check 1: Campaign must be terminal
+        if !campaign.status.is_terminal() {
             panic_with_error(&env, Error::RefundNotPermitted);
         }
 
-        // For Ended campaigns, only allow refunds if goal was NOT reached
-        if campaign.status == CampaignStatus::Ended && campaign.goal_reached() {
-            panic_with_error(&env, Error::RefundNotPermitted);
+        // Eligibility Check 2-3: Status-specific rules
+        match campaign.status {
+            CampaignStatus::Cancelled => {
+                // Refunds always allowed for cancelled campaigns
+            }
+            CampaignStatus::Ended => {
+                // Refunds only if NO milestones have been released
+                for i in 0..campaign.milestone_count {
+                    if let Some(milestone) = get_milestone(&env, i) {
+                        if milestone.status == MilestoneStatus::Released {
+                            panic_with_error(&env, Error::RefundNotPermitted);
+                        }
+                    }
+                }
+            }
+            _ => panic_with_error(&env, Error::RefundNotPermitted),
         }
 
-        // Check refund window: current_time <= end_time + REFUND_WINDOW
+        // Eligibility Check 4: Refund window
         let current_time = env.ledger().timestamp();
         if current_time > campaign.end_time + REFUND_WINDOW {
             panic_with_error(&env, Error::RefundWindowClosed);
         }
 
-        // Prevent double refunds
+        // Eligibility Check 5: Prevent double refunds
         if donor_record.refund_claimed {
             panic_with_error(&env, Error::RefundAlreadyClaimed);
         }
 
-        // Mark refund as claimed
+        // Calculate total released across all milestones
+        let mut total_released: i128 = 0;
+        for i in 0..campaign.milestone_count {
+            if let Some(milestone) = get_milestone(&env, i) {
+                total_released += milestone.released_amount;
+            }
+        }
+
+        // Calculate refund multiplier: (raised - released) / raised
+        // This gives the fraction of the donation that should be refunded
+        let refund_numerator = campaign.raised_amount - total_released;
+        let refund_denominator = campaign.raised_amount;
+
+        // Mark refund as claimed early to prevent reentrancy
         donor_record.refund_claimed = true;
         set_donor(&env, &donor, &donor_record);
 
-        // Emit refund event
+        // For each asset the donor contributed to, calculate and transfer refund
+        for asset in campaign.accepted_assets.iter() {
+            let asset_address = asset.issuer.as_ref()
+                .unwrap_or_else(|| panic_with_error(&env, Error::MissingIssuerAddress));
+            
+            // Get amount donor contributed in this asset
+            let donor_asset_amount = get_donor_asset_donation(&env, &donor, asset_address);
+            
+            if donor_asset_amount > 0 {
+                // Calculate pro-rata refund: (donor_amount * refund_numerator) / refund_denominator
+                let refund_amount = (donor_asset_amount * refund_numerator) / refund_denominator;
+                
+                if refund_amount > 0 {
+                    // Transfer refund to donor
+                    use soroban_sdk::token;
+                    let token_client = token::Client::new(&env, asset_address);
+                    token_client.transfer(&env.current_contract_address(), &donor, &refund_amount);
+
+                    // Emit event for this asset's refund
+                    env.events().publish(
+                        ("campaign", "asset_refund"),
+                        (donor.clone(), asset_address.clone(), refund_amount),
+                    );
+                }
+            }
+        }
+
+        // Emit overall refund claimed event
         env.events().publish(
             ("campaign", "refund_claimed"),
             (&donor, donor_record.total_donated),
@@ -387,6 +467,12 @@ fn validate_milestones(
     Ok(())
 }
 
+#[cfg(test)]
+mod test {
+    pub mod refund_eligibility_tests;
+}
+
+    Ok(())
 /// Resolves the asset code string for an AssetInfo.
 /// For Native XLM returns "XLM"; for Stellar(addr) looks up the code in accepted_assets.
 fn resolve_asset_code(env: &Env, asset: &AssetInfo, campaign: &CampaignData) -> String {
