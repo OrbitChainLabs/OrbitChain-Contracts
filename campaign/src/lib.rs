@@ -5,7 +5,7 @@ pub mod types;
 
 use soroban_sdk::{contract, contractimpl, Address, Env, Vec};
 use types::{CampaignData, CampaignInitializedEvent, CampaignStatus, DonorRecord, Error, MilestoneData, MilestoneStatus, StellarAsset, AssetInfo};
-use storage::{get_campaign, set_campaign, get_milestone, set_milestone, get_donor, set_donor, get_total_raised as storage_get_total_raised, set_total_raised};
+use storage::{get_campaign, set_campaign, get_milestone, set_milestone, get_donor, set_donor, get_total_raised as storage_get_total_raised, set_total_raised, increment_donor_asset_donation, get_donor_asset_donation};
 
 pub const VERSION: u32 = 1;
 
@@ -141,6 +141,10 @@ impl CampaignContract {
         let new_total = storage_get_total_raised(&env) + amount;
         set_total_raised(&env, new_total);
 
+        // Track per-asset donation for pro-rata refund calculation
+        let asset_address = get_token_address_for_asset(&env, &asset, &campaign);
+        increment_donor_asset_donation(&env, &donor, &asset_address, amount);
+
         // Issue #195 – update donor record
         let mut donor_record = get_donor(&env, &donor).unwrap_or(DonorRecord {
             donor: donor.clone(),
@@ -243,8 +247,10 @@ impl CampaignContract {
 
     /// Claim a refund for a donation.
     ///
-    /// Transfers the donor's full donation amount back to them, proportionally
-    /// across all accepted assets. Marks the donor's refund_claimed flag as true.
+    /// Calculates pro-rata refund based on milestone releases:
+    /// - refund_amount = donor_contribution * (raised_amount - total_released) / raised_amount
+    /// 
+    /// Transfers refund per asset separately. Marks the donor's refund_claimed flag as true.
     ///
     /// # Panics
     /// - `Error::NotInitialized` if campaign not initialized
@@ -282,11 +288,51 @@ impl CampaignContract {
             panic_with_error(&env, Error::RefundAlreadyClaimed);
         }
 
-        // Mark refund as claimed
+        // Calculate total released across all milestones
+        let mut total_released: i128 = 0;
+        for i in 0..campaign.milestone_count {
+            if let Some(milestone) = get_milestone(&env, i) {
+                total_released += milestone.released_amount;
+            }
+        }
+
+        // Calculate refund multiplier: (raised - released) / raised
+        // This gives the fraction of the donation that should be refunded
+        let refund_numerator = campaign.raised_amount - total_released;
+        let refund_denominator = campaign.raised_amount;
+
+        // Mark refund as claimed early to prevent reentrancy
         donor_record.refund_claimed = true;
         set_donor(&env, &donor, &donor_record);
 
-        // Emit refund event
+        // For each asset the donor contributed to, calculate and transfer refund
+        for asset in campaign.accepted_assets.iter() {
+            let asset_address = asset.issuer.as_ref()
+                .unwrap_or_else(|| panic_with_error(&env, Error::MissingIssuerAddress));
+            
+            // Get amount donor contributed in this asset
+            let donor_asset_amount = get_donor_asset_donation(&env, &donor, asset_address);
+            
+            if donor_asset_amount > 0 {
+                // Calculate pro-rata refund: (donor_amount * refund_numerator) / refund_denominator
+                let refund_amount = (donor_asset_amount * refund_numerator) / refund_denominator;
+                
+                if refund_amount > 0 {
+                    // Transfer refund to donor
+                    use soroban_sdk::token;
+                    let token_client = token::Client::new(&env, asset_address);
+                    token_client.transfer(&env.current_contract_address(), &donor, &refund_amount);
+
+                    // Emit event for this asset's refund
+                    env.events().publish(
+                        ("campaign", "asset_refund"),
+                        (donor.clone(), asset_address.clone(), refund_amount),
+                    );
+                }
+            }
+        }
+
+        // Emit overall refund claimed event
         env.events().publish(
             ("campaign", "refund_claimed"),
             (&donor, donor_record.total_donated),

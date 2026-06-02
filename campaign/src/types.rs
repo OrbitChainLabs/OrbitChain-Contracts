@@ -221,6 +221,9 @@ pub enum DataKey {
     TotalRaised,
     /// Per-token raised amount — keyed by the token contract address.
     AssetRaised(Address),
+    /// Per-asset donation by a donor — keyed by (donor_address, asset_address).
+    /// Tracks exact amount contributed in each asset for pro-rata refund calculation.
+    DonorAssetDonation(Address, Address),
 
     // ── Temporary ───────────────────────────────────────────────────────────
     /// Transient campaign status flag used during state transitions.
