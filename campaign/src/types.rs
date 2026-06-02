@@ -91,6 +91,8 @@ pub enum Error {
     NoDonorRecord               = 51,
     /// Donor has already claimed a refund for this campaign.
     RefundAlreadyClaimed        = 52,
+    /// Refund window has closed (> 30 days after campaign end or cancellation).
+    RefundWindowClosed          = 53,
 
     // ── Re-entrancy / concurrency ──────────────────────────────────────── 6x
     /// A re-entrant call was detected; operation aborted.

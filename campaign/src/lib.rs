@@ -9,6 +9,10 @@ use storage::{get_campaign, set_campaign, get_milestone, set_milestone, get_dono
 
 pub const VERSION: u32 = 1;
 
+/// Refund window duration: 30 days in seconds.
+/// Refunds are only permitted within this window after campaign end or cancellation.
+pub const REFUND_WINDOW: u64 = 30 * 24 * 60 * 60;
+
 #[contract]
 pub struct CampaignContract;
 
@@ -186,6 +190,107 @@ impl CampaignContract {
 
     pub fn version() -> u32 {
         VERSION
+    }
+
+    /// Check if a donor is eligible to claim a refund.
+    ///
+    /// Returns `true` if:
+    /// - Campaign is in a terminal state (Ended or Cancelled)
+    /// - Goal was NOT reached (refunds only for failed campaigns)
+    /// - Current time is within the refund window (≤ 30 days after end_time)
+    /// - Donor has not already claimed a refund
+    ///
+    /// No auth required (view function).
+    pub fn is_refund_eligible(env: Env, donor: Address) -> bool {
+        let campaign = match get_campaign(&env) {
+            Some(c) => c,
+            None => return false,
+        };
+
+        let donor_record = match get_donor(&env, &donor) {
+            Some(d) => d,
+            None => return false,
+        };
+
+        // Refunds only available when campaign is in terminal state
+        if !campaign.status.is_terminal() {
+            return false;
+        }
+
+        // Refunds only for failed campaigns (Cancelled or Ended without goal)
+        if !campaign.status.allows_refunds() {
+            return false;
+        }
+
+        // For Ended status, goal must not have been reached
+        if campaign.status == CampaignStatus::Ended && campaign.goal_reached() {
+            return false;
+        }
+
+        // Check refund window: current_time <= end_time + REFUND_WINDOW
+        let current_time = env.ledger().timestamp();
+        if current_time > campaign.end_time + REFUND_WINDOW {
+            return false;
+        }
+
+        // Donor must not have already claimed refund
+        if donor_record.refund_claimed {
+            return false;
+        }
+
+        true
+    }
+
+    /// Claim a refund for a donation.
+    ///
+    /// Transfers the donor's full donation amount back to them, proportionally
+    /// across all accepted assets. Marks the donor's refund_claimed flag as true.
+    ///
+    /// # Panics
+    /// - `Error::NotInitialized` if campaign not initialized
+    /// - `Error::NoDonorRecord` if donor has never donated
+    /// - `Error::RefundNotPermitted` if campaign is not in terminal state or goal was reached
+    /// - `Error::RefundWindowClosed` if current time > end_time + REFUND_WINDOW
+    /// - `Error::RefundAlreadyClaimed` if donor already claimed refund
+    pub fn claim_refund(env: Env, donor: Address) {
+        donor.require_auth();
+
+        let campaign = get_campaign(&env)
+            .unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
+
+        let mut donor_record = get_donor(&env, &donor)
+            .unwrap_or_else(|| panic_with_error(&env, Error::NoDonorRecord));
+
+        // Check campaign status allows refunds
+        if !campaign.status.allows_refunds() {
+            panic_with_error(&env, Error::RefundNotPermitted);
+        }
+
+        // For Ended campaigns, only allow refunds if goal was NOT reached
+        if campaign.status == CampaignStatus::Ended && campaign.goal_reached() {
+            panic_with_error(&env, Error::RefundNotPermitted);
+        }
+
+        // Check refund window: current_time <= end_time + REFUND_WINDOW
+        let current_time = env.ledger().timestamp();
+        if current_time > campaign.end_time + REFUND_WINDOW {
+            panic_with_error(&env, Error::RefundWindowClosed);
+        }
+
+        // Prevent double refunds
+        if donor_record.refund_claimed {
+            panic_with_error(&env, Error::RefundAlreadyClaimed);
+        }
+
+        // Mark refund as claimed
+        donor_record.refund_claimed = true;
+        set_donor(&env, &donor, &donor_record);
+
+        // Emit refund event
+        env.events().publish(
+            ("campaign", "refund_claimed"),
+            (&donor, donor_record.total_donated),
+        );
     }
 }
 
