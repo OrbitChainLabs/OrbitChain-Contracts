@@ -1,3 +1,11 @@
+## OrbitChain Makefile
+##   make build        - Compile contracts
+##   make test         - Run all tests
+##   make audit        - Run cargo audit
+##   make deny         - Check licenses
+##   make fmt          - Format code
+##   make clippy       - Lint code
+
 .PHONY: build build-wasm build-tools test fmt lint clean optimize help \
         setup deploy-testnet deploy-sandbox sandbox-start audit deny
 
