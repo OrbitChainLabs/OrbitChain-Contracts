@@ -7,13 +7,17 @@ pub struct PollConfig {
     pub interval: Duration,
     /// Maximum interval after back-off (used when API errors occur).
     pub max_interval: Duration,
+    /// The default interval this config was created with (for reset).
+    default_interval: Duration,
 }
 
 impl Default for PollConfig {
     fn default() -> Self {
+        let interval = Duration::from_secs(10);
         Self {
-            interval: Duration::from_secs(10),
+            interval,
             max_interval: Duration::from_secs(120),
+            default_interval: interval,
         }
     }
 }
@@ -21,17 +25,21 @@ impl Default for PollConfig {
 impl PollConfig {
     /// Returns a config suited for high-throughput environments (shorter interval).
     pub fn high_frequency() -> Self {
+        let interval = Duration::from_secs(5);
         Self {
-            interval: Duration::from_secs(5),
+            interval,
             max_interval: Duration::from_secs(60),
+            default_interval: interval,
         }
     }
 
     /// Returns a config suited for low-traffic / cost-sensitive deployments.
     pub fn low_frequency() -> Self {
+        let interval = Duration::from_secs(30);
         Self {
-            interval: Duration::from_secs(30),
+            interval,
             max_interval: Duration::from_secs(300),
+            default_interval: interval,
         }
     }
 
@@ -40,8 +48,8 @@ impl PollConfig {
         self.interval = (self.interval * 2).min(self.max_interval);
     }
 
-    /// Resets the interval back to its default after a successful poll.
+    /// Resets the interval back to its original configured default.
     pub fn reset(&mut self) {
-        *self = Self::default();
+        self.interval = self.default_interval;
     }
 }
