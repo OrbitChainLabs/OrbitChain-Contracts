@@ -11,6 +11,7 @@ pub struct SecureVault {
 }
 
 impl SecureVault {
+    #[must_use]
     pub fn from_env() -> Self {
         dotenv::dotenv().ok();
 
@@ -48,7 +49,7 @@ impl SecureVault {
         Ok(())
     }
 
-    /// Validate keys for testnet (less strict)
+    /// Validate keys for testnet (permissive — allows empty/unset keys).
     pub fn validate_for_testnet(&self) -> Result<()> {
         if let Some(secret) = &self.admin_secret_key {
             if !secret.is_empty() && !secret.starts_with('S') {
