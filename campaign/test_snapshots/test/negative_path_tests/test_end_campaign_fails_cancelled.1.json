@@ -67,7 +67,9 @@
                     "key": {
                       "symbol": "concluded_at_ledger"
                     },
-                    "val": "void"
+                    "val": {
+                      "u32": 0
+                    }
                   },
                   {
                     "key": {

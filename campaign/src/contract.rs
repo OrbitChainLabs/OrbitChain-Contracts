@@ -30,6 +30,7 @@ pub fn end_campaign(env: &Env) {
     }
 
     campaign.status = CampaignStatus::Ended;
+    campaign.concluded_at_ledger = Some(env.ledger().sequence());
     set_campaign(env, &campaign);
 
     event::campaign_ended(env);
@@ -57,6 +58,7 @@ pub fn cancel_campaign(env: &Env) {
     }
 
     campaign.status = CampaignStatus::Cancelled;
+    campaign.concluded_at_ledger = Some(env.ledger().sequence());
     set_campaign(env, &campaign);
 
     event::campaign_cancelled(env, &campaign.creator);
