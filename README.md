@@ -78,7 +78,7 @@ orbitchain-cli signing build-donation GBJCHU... 1 5000000 XLM "Supporting educat
 orbitchain-cli response process '{"requestId":"req_123","xdr":"AAAA...","signer":"GBJCHU...","signedAt":1234567890}'
 ```
 
-For detailed documentation, see [CLI Advanced Guide](CLI_ADVANCED_GUIDE.md) and [Signing Request Guide](SIGNING_REQUEST_GUIDE.md).
+For detailed documentation, refer to the inline help: run any command with `--help` for full usage information.
 
 ## 🛠️ Development Setup
 
@@ -413,12 +413,6 @@ async fn main() -> Result<()> {
 }
 ```
 
-### Documentation
-
-- **[Fee Estimation Guide](./FEE_ESTIMATION.md)**: Comprehensive API reference and architecture
-- **[Integration Guide](./DONATION_MODAL_INTEGRATION.md)**: How to integrate with donation modal
-- **[Summary](./FEE_SUMMARY.md)**: Implementation details and test coverage
-
 ### Key Constants
 
 - **Base Fee**: 100 stroops (0.00001 XLM)
@@ -487,7 +481,7 @@ You can run the security scans locally using the following commands:
 If a vulnerability is found, you should:
 
 1.  **Update dependencies**: Run `cargo update` to see if a newer version of the crate resolves the issue.
-2.  **Ignore (Temporary)**: If a fix is not available and you have audited the vulnerability, you can temporarily ignore it by adding it to `deny.toml` under `[advisories] -> ignore`.
+2.  **Ignore (Temporary)**: If a fix is not available and you have audited the vulnerability, you can temporarily ignore it by adding it to the `[advisories] -> ignore` list in the deny configuration.
 
 #### License/Ban Policy (`cargo deny`)
 

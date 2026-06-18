@@ -100,22 +100,6 @@ Emitted when the campaign creator cancels the campaign.
 
 ---
 
-## `refund_issued`
-
-Emitted when a donor successfully claims a refund.
-
-**Topics:** `["campaign", "refund_issued"]`
-
-**Data:**
-
-| Field | Type | Description |
-|---|---|---|
-| `donor` | `Address` | Donor's Stellar address |
-| `amount` | `i128` | Refunded amount in base units |
-| `asset` | `AssetInfo` | Asset used for the refund |
-
----
-
 ## `refund_claimed`
 
 Emitted when a donor successfully claims a refund.
@@ -128,6 +112,24 @@ Emitted when a donor successfully claims a refund.
 |---|---|---|
 | `donor` | `Address` | Donor's Stellar address |
 | `total_donated` | `i128` | Total amount donated by this donor |
+
+---
+
+## `asset_refund`
+
+Emitted once per asset when a donor's pro-rata refund is transferred for that asset.
+Multiple events may be emitted within a single `claim_refund` call when the donor
+contributed more than one asset type.
+
+**Topics:** `("campaign", "asset_refund")`
+
+**Data:**
+
+| Field | Type | Description |
+|---|---|---|
+| `donor` | `Address` | Donor's Stellar address |
+| `asset_address` | `Address` | Contract address of the refunded asset |
+| `refund_amount` | `i128` | Amount refunded in the asset's base units |
 
 ---
 
