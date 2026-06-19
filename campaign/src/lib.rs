@@ -417,8 +417,12 @@ impl CampaignContract {
 
                     if donor_asset_amount > 0 {
                         // Calculate pro-rata refund: (donor_amount * refund_numerator) / refund_denominator
-                        let refund_amount =
-                            (donor_asset_amount * refund_numerator) / refund_denominator;
+                        // PR #21: anti-dust floor via calculate_refund_amount helper.
+                        let refund_amount = calculate_refund_amount(
+                            donor_asset_amount,
+                            refund_numerator,
+                            refund_denominator,
+                        );
 
                         if refund_amount > 0 {
                             // Issue #244 – Verify contract balance before transfer
@@ -791,6 +795,28 @@ mod test {
     }
 }
 
+fn calculate_refund_amount(
+    donor_asset_amount: i128,
+    refund_numerator: i128,
+    refund_denominator: i128,
+) -> i128 {
+    debug_assert!(refund_denominator > 0, "refund_denominator must be nonzero");
+
+    let numerator = donor_asset_amount
+        .checked_mul(refund_numerator)
+        .expect("overflow in refund numerator");
+
+    let refund = numerator / refund_denominator;
+
+    // Anti-dust floor: if the donor is entitled to something nonzero but
+    // floor division rounded it all the way down to 0, bump to 1 unit
+    // rather than letting them lose their entire refund to rounding.
+    if refund == 0 && numerator > 0 {
+        1
+    } else {
+        refund
+    }
+}
 fn active_campaign_count(env: &Env) -> u64 {
     match get_campaign(env) {
         Some(campaign) if campaign.status.accepts_donations() => 1,
