@@ -1,7 +1,10 @@
 use soroban_sdk::{Address, Env, token, panic_with_error};
 use crate::event;
 use crate::types::{Error, MilestoneStatus};
-use crate::storage::{acquire_lock, get_campaign, get_milestone, is_frozen, release_lock, set_milestone};
+use crate::storage::{
+    acquire_lock, get_campaign, get_milestone, is_frozen, release_lock, set_milestone,
+    storage_increment_release_count,
+};
 
 /// Issue #207 – `release_milestone` function
 ///
@@ -13,10 +16,13 @@ use crate::storage::{acquire_lock, get_campaign, get_milestone, is_frozen, relea
 /// Validates milestone status is `Unlocked`.
 /// Prevents double release — `Released` milestones panic with `MilestoneAlreadyReleased`.
 /// Prevents skipping milestones — previous milestone must be Released.
-/// Transfers tokens from contract to recipient.
+/// Transfers tokens from the campaign's primary (first) accepted asset to recipient.
 /// Sets milestone status to `Released`.
 /// Emits `milestone_released` event.
 /// Respects the freeze flag — panics with `ContractFrozen` if frozen.
+///
+/// For campaigns accepting multiple assets, use `release_milestone_multi_asset`
+/// instead, which distributes the release proportionally across all assets.
 ///
 /// ## Security
 ///
@@ -75,34 +81,39 @@ pub fn release_milestone(env: &Env, milestone_index: u32, recipient: Address) {
 
     let timestamp = env.ledger().timestamp();
 
-    // Transfer each accepted asset proportionally
-    for asset in campaign.accepted_assets.iter() {
-        if let Some(issuer) = asset.issuer.clone() {
-            let token_client = token::Client::new(env, &issuer);
+    // Transfer from the primary (first) accepted asset only — releasing from
+    // every accepted asset would multiply the payout by the asset count.
+    // Campaigns with more than one accepted asset must use
+    // `release_milestone_multi_asset`, which distributes proportionally.
+    let asset = campaign.accepted_assets.first().unwrap_or_else(|| {
+        panic_with_error!(env, Error::NotInitialized)
+    });
 
-            // Issue #244 – Query actual contract balance for verification
-            let asset_balance = token_client.balance(&env.current_contract_address());
+    if let Some(issuer) = asset.issuer.clone() {
+        let token_client = token::Client::new(env, &issuer);
 
-            if asset_balance > 0 && release_amount > 0 {
-                // Issue #244 – Verify contract balance is sufficient BEFORE transfer
-                if asset_balance < release_amount {
-                    panic_with_error!(env, Error::InsufficientContractBalance);
-                }
+        // Issue #244 – Query actual contract balance for verification
+        let asset_balance = token_client.balance(&env.current_contract_address());
 
-                // Clamp to available balance (should never be needed due to check above)
-                let transfer_amount = release_amount.min(asset_balance);
-
-                token_client.transfer(&env.current_contract_address(), &recipient, &transfer_amount);
-
-                event::milestone_released(
-                    env,
-                    milestone_index,
-                    transfer_amount,
-                    asset.asset_code.clone(),
-                    &recipient,
-                    timestamp,
-                );
+        if asset_balance > 0 && release_amount > 0 {
+            // Issue #244 – Verify contract balance is sufficient BEFORE transfer
+            if asset_balance < release_amount {
+                panic_with_error!(env, Error::InsufficientContractBalance);
             }
+
+            // Clamp to available balance (should never be needed due to check above)
+            let transfer_amount = release_amount.min(asset_balance);
+
+            token_client.transfer(&env.current_contract_address(), &recipient, &transfer_amount);
+
+            event::milestone_released(
+                env,
+                milestone_index,
+                transfer_amount,
+                asset.asset_code.clone(),
+                &recipient,
+                timestamp,
+            );
         }
     }
 
@@ -111,6 +122,7 @@ pub fn release_milestone(env: &Env, milestone_index: u32, recipient: Address) {
     milestone.released_at = Some(timestamp);
     milestone.released_to = Some(recipient);
     set_milestone(env, milestone_index, &milestone);
+    storage_increment_release_count(env);
 
     // Issue #242 – Release reentrancy lock
     release_lock(env);

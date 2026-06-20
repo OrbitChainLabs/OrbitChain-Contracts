@@ -5,12 +5,15 @@
 
 #![cfg(test)]
 
-use soroban_sdk::testutils::{Address as AddressTestUtils, Ledger};
-use soroban_sdk::{Address, Env};
+use core::ops::Add;
 
-use crate::types::{CampaignStatus, CampaignData, DonorRecord, AssetInfo, StellarAsset, MilestoneStatus};
+use soroban_sdk::testutils::{Address as AddressTestUtils, Ledger};
+use soroban_sdk::token::{StellarAssetClient, TokenClient};
+use soroban_sdk::{Address, Env, Vec, log, vec};
+
+use crate::types::{AssetInfo, CampaignData, CampaignStatus, DonorRecord, MilestoneData, MilestoneStatus, StellarAsset};
 use crate::storage::{set_campaign, set_donor, set_milestone};
-use crate::CampaignContract;
+use crate::{CampaignContract, CampaignContractClient};
 use super::with_contract;
 
 /// Base ledger timestamp (1 year in seconds) used so we can safely subtract
@@ -280,4 +283,196 @@ fn test_claim_refund_ended_with_released_milestone_eligibility() {
         let eligible = CampaignContract::is_refund_eligible(env.clone(), donor.clone());
         assert!(!eligible, "Ended campaign with released milestones should NOT allow refunds");
     });
+}
+
+
+fn setup<'a>() -> (Env, CampaignContractClient<'a>, Address) {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(CampaignContract, ());
+    let client = CampaignContractClient::new(&env, &contract_id);
+
+    let creator = Address::generate(&env);
+    (env, client, creator)
+}
+
+fn create_test_milestone_data(
+    env: &Env,
+    index: u32,
+    target_amount: i128,
+    status: MilestoneStatus,
+) -> Vec<MilestoneData>{
+    let milestone = crate::types::MilestoneData {
+        index,
+        target_amount,
+        released_amount: if status == MilestoneStatus::Released { target_amount } else { 0 },
+        description_hash: soroban_sdk::BytesN::from_array(env, &[0u8; 32]),
+        status,
+        released_at: None,
+        released_at_ledger: None,
+        release_tx: None,
+        released_to: None,
+    };
+    vec![&env, milestone]
+}
+
+fn token_asset<'a>(env: &Env) -> (StellarAssetClient<'a>, Address, TokenClient) {
+    let admin = Address::generate(&env);
+    let sac = env.register_stellar_asset_contract_v2(admin.clone());
+    let token_address = sac.address();
+    let token = TokenClient::new(&env, &token_address);
+    let token_sac = StellarAssetClient::new(&env, &token_address);
+
+    (token_sac, token_address, token)
+}
+
+#[test]
+fn test_claim_refund_ended_donor_100() {
+    let (env, client, creator) = setup();
+    env.mock_all_auths();
+    env.ledger().set_timestamp(BASE);
+
+    let (token_sac, token_address, token) = token_asset(&env);
+
+    let donor = Address::generate(&env);
+    let donor2 = Address::generate(&env);
+    token_sac.mint(&donor, &100);
+    token_sac.mint(&donor2, &1_000_000);
+
+    let goal_amount = 999_000;
+    let end_time = env.ledger().timestamp() + 1000;
+    let mut accepted_assets = soroban_sdk::Vec::new(&env);
+    accepted_assets.push_back(StellarAsset {
+        asset_code: soroban_sdk::String::from_str(&env, "TST"),
+        issuer: Some(token_address.clone()),
+    });
+    let milestones = create_test_milestone_data(&env, 0, 999_000, MilestoneStatus::Locked);
+    let min_donation_amount = 0;
+    let contract_address = &client.address;
+
+    client.initialize(&creator, &goal_amount, &end_time, &accepted_assets, &milestones, &min_donation_amount);
+
+    client.donate(&donor, &100, &AssetInfo::Stellar(token_address.clone()));
+    token.transfer(&donor, contract_address, &100);
+    client.donate(&donor2, &999_900, &AssetInfo::Stellar(token_address.clone()));
+    token.transfer(&donor2, contract_address, &999_900);
+
+
+    let recipient = Address::generate(&env);
+    client.release_milestone(&0, &recipient);
+
+    client.cancel_campaign();
+
+    let is_refund_eligible = client.is_refund_eligible(&donor);
+    assert!(is_refund_eligible);
+
+    client.claim_refund(&donor);
+    client.claim_refund(&donor2);
+
+    let donor_balance = token.balance(&donor);
+    assert_eq!(donor_balance, 1);
+
+    let donor2_balance = token.balance(&donor2);
+    assert_eq!(donor2_balance, 1099);
+    
+    let contract_balance = token.balance(&contract_address);
+    assert_eq!(contract_balance, 0);
+}
+
+#[test]
+fn test_claim_refund_ended_donor_1() {
+    let (env, client, creator) = setup();
+    env.mock_all_auths();
+    env.ledger().set_timestamp(BASE);
+
+    let (token_sac, token_address, token) = token_asset(&env);
+
+    let donor = Address::generate(&env);
+    let donor2 = Address::generate(&env);
+    token_sac.mint(&donor, &100);
+    token_sac.mint(&donor2, &1_000_000);
+
+    let goal_amount = 9999;
+    let end_time = env.ledger().timestamp() + 1000;
+    let mut accepted_assets = soroban_sdk::Vec::new(&env);
+    accepted_assets.push_back(StellarAsset {
+        asset_code: soroban_sdk::String::from_str(&env, "TST"),
+        issuer: Some(token_address.clone()),
+    });
+    let milestones = create_test_milestone_data(&env, 0, 9999, MilestoneStatus::Locked);
+    let min_donation_amount = 0;
+    let contract_address = &client.address;
+
+    client.initialize(&creator, &goal_amount, &end_time, &accepted_assets, &milestones, &min_donation_amount);
+
+    client.donate(&donor, &1, &AssetInfo::Stellar(token_address.clone()));
+    token.transfer(&donor, contract_address, &1);
+    client.donate(&donor2, &9999, &AssetInfo::Stellar(token_address.clone()));
+    token.transfer(&donor2, contract_address, &9999);
+
+
+    let recipient = Address::generate(&env);
+    client.release_milestone(&0, &recipient);
+
+    client.cancel_campaign();
+
+    let is_refund_eligible = client.is_refund_eligible(&donor);
+    assert!(is_refund_eligible);
+
+    client.claim_refund(&donor);
+    let donor_balance = token.balance(&donor);
+    assert_eq!(donor_balance, 100);
+
+    let donor2_balance = token.balance(&donor2);
+    assert_eq!(donor2_balance, 990001);
+
+    let contract_balance = token.balance(&contract_address);
+    assert_eq!(contract_balance, 0);
+}
+
+#[test]
+fn test_claim_refund_ended_full_refund() {
+    let (env, client, creator) = setup();
+    env.mock_all_auths();
+    env.ledger().set_timestamp(BASE);
+
+    let (token_sac, token_address, token) = token_asset(&env);
+
+    let donor = Address::generate(&env);
+    let donor2 = Address::generate(&env);
+    token_sac.mint(&donor, &10000);
+    token_sac.mint(&donor2, &1_000_000);
+
+    let goal_amount = 1000;
+    let end_time = env.ledger().timestamp() + 1000;
+    let mut accepted_assets = soroban_sdk::Vec::new(&env);
+    accepted_assets.push_back(StellarAsset {
+        asset_code: soroban_sdk::String::from_str(&env, "TST"),
+        issuer: Some(token_address.clone()),
+    });
+    let milestones = create_test_milestone_data(&env, 0, 1000, MilestoneStatus::Locked);
+    let min_donation_amount = 0;
+    let contract_address = &client.address;
+
+    client.initialize(&creator, &goal_amount, &end_time, &accepted_assets, &milestones, &min_donation_amount);
+
+    client.donate(&donor, &1500, &AssetInfo::Stellar(token_address.clone()));
+    token.transfer(&donor, contract_address, &1500);
+
+
+    let recipient = Address::generate(&env);
+    client.release_milestone(&0, &recipient);
+
+    client.cancel_campaign();
+
+    let is_refund_eligible = client.is_refund_eligible(&donor);
+    assert!(is_refund_eligible);
+
+    client.claim_refund(&donor);
+    let donor_balance = token.balance(&donor);
+    assert_eq!(donor_balance, 9000);
+
+    let contract_balance = token.balance(&contract_address);
+    assert_eq!(contract_balance, 0);
 }

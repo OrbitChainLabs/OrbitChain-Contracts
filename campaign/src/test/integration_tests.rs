@@ -307,6 +307,96 @@ fn test_get_total_raised_default() {
     });
 }
 
+#[test]
+fn test_analytics_defaults_before_initialize() {
+    let env = Env::default();
+    with_contract(&env, || {
+        assert!(CampaignContract::get_campaign_report(env.clone()).is_none());
+        assert_eq!(CampaignContract::get_donation_count(env.clone()), 0);
+        assert_eq!(CampaignContract::get_donor_count(env.clone()), 0);
+        assert_eq!(CampaignContract::get_release_count(env.clone()), 0);
+        assert_eq!(CampaignContract::get_total_tx_count(env.clone()), 0);
+
+        let summary = CampaignContract::get_platform_summary(env.clone());
+        assert_eq!(summary.total_campaigns, 0);
+        assert_eq!(summary.active_campaigns, 0);
+        assert_eq!(summary.total_donations, 0);
+        assert_eq!(summary.total_releases, 0);
+        assert_eq!(summary.total_transactions, 0);
+
+        let metrics = CampaignContract::get_dashboard_metrics(env.clone());
+        assert_eq!(metrics.total_campaigns, 0);
+        assert_eq!(metrics.active_campaigns, 0);
+        assert_eq!(metrics.total_donations, 0);
+        assert_eq!(metrics.total_releases, 0);
+        assert_eq!(metrics.total_transactions, 0);
+    });
+}
+
+#[test]
+fn test_campaign_analytics_report_and_summary() {
+    let env = Env::default();
+    env.mock_all_auths();
+    with_contract(&env, || {
+        let (creator, assets, milestones) = setup_basic_campaign(&env);
+        let goal_amount: i128 = 1000;
+        let end_time = env.ledger().timestamp() + 86_400;
+
+        CampaignContract::initialize(
+            env.clone(),
+            creator.clone(),
+            goal_amount,
+            end_time,
+            assets.clone(),
+            milestones.clone(),
+            0,
+        ).unwrap();
+
+        let initial = CampaignContract::get_campaign_report(env.clone()).unwrap();
+        assert_eq!(initial.creator, creator);
+        assert_eq!(initial.goal_amount, 1000);
+        assert_eq!(initial.raised_amount, 0);
+        assert_eq!(initial.remaining_amount, 1000);
+        assert_eq!(initial.progress_bps, 0);
+        assert_eq!(initial.donor_count, 0);
+        assert_eq!(initial.donation_count, 0);
+        assert_eq!(initial.release_count, 0);
+
+        let donor1 = Address::generate(&env);
+        let donor2 = Address::generate(&env);
+        CampaignContract::donate(env.clone(), donor1, 250, AssetInfo::Native);
+        CampaignContract::donate(env.clone(), donor2, 500, AssetInfo::Native);
+
+        let report = CampaignContract::get_campaign_report(env.clone()).unwrap();
+        assert_eq!(report.raised_amount, 750);
+        assert_eq!(report.remaining_amount, 250);
+        assert_eq!(report.progress_bps, 7500);
+        assert_eq!(report.status, CampaignStatus::Active);
+        assert_eq!(report.milestone_count, 1);
+        assert_eq!(report.donor_count, 2);
+        assert_eq!(report.donation_count, 2);
+        assert_eq!(report.release_count, 0);
+
+        assert_eq!(CampaignContract::get_donation_count(env.clone()), 2);
+        assert_eq!(CampaignContract::get_donor_count(env.clone()), 2);
+        assert_eq!(CampaignContract::get_total_tx_count(env.clone()), 2);
+
+        let summary = CampaignContract::get_platform_summary(env.clone());
+        assert_eq!(summary.total_campaigns, 1);
+        assert_eq!(summary.active_campaigns, 1);
+        assert_eq!(summary.total_donations, 2);
+        assert_eq!(summary.total_releases, 0);
+        assert_eq!(summary.total_transactions, 2);
+
+        let metrics = CampaignContract::get_dashboard_metrics(env.clone());
+        assert_eq!(metrics.total_campaigns, summary.total_campaigns);
+        assert_eq!(metrics.active_campaigns, summary.active_campaigns);
+        assert_eq!(metrics.total_donations, summary.total_donations);
+        assert_eq!(metrics.total_releases, summary.total_releases);
+        assert_eq!(metrics.total_transactions, summary.total_transactions);
+    });
+}
+
 // ─── Get donor record for non-donor ──────────────────────────────────────────
 
 #[test]

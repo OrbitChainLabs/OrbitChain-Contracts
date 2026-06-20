@@ -2,6 +2,14 @@
 
 [![CI](https://github.com/orbitchain/orbitchain-contracts/workflows/CI/badge.svg)](https://github.com/orbitchain/orbitchain-contracts/actions)
 
+## Contract Canonicalization
+
+Decision: **Option B (conservative)** — keep `campaign/` (`orbitchain-campaign`) as the canonical crowdfunding contract for all new development, audits, deployments, and integrations. The `campaign/` implementation remains the authoritative contract for milestone flows, refunds, freeze/upgrade controls, reentrancy protection, typed errors, and dashboard analytics.
+
+`crates/contracts/core/` (`orbitchain-core`) is retained only as a legacy compatibility/reference contract. Do not add new campaign features there; use `campaign/` for any new logic, analytics endpoints, or deployment work. Any remaining behavior worth preserving from `core` should be migrated into `campaign/` before `core` is removed in a future breaking release.
+
+Canonical campaign analytics now live on `orbitchain-campaign`: use `get_campaign_report`, `get_platform_summary`, `get_dashboard_metrics`, `get_donation_count`, `get_donor_count`, `get_release_count`, and `get_total_tx_count` for dashboard and export workflows.
+
 **OrbitChain** is an on-chain crowdfunding protocol built on the **Stellar Network** and **Soroban smart contracts**. It provides a transparent, trust-minimized platform where campaign creators can raise funds in native XLM or any Stellar-based asset (USDC, NGNT, custom tokens), and donors retain full visibility into how their contributions are deployed.
 
 The protocol is governed by a set of deterministic Soroban contracts — handling campaign lifecycle management, milestone-based fund release, multi-asset donation processing, and cross-chain token bridging — complemented by a comprehensive CLI toolchain for deployment, transaction signing, wallet integration, and network diagnostics.
@@ -12,10 +20,14 @@ This project uses a Rust Cargo workspace with the following structure:
 
 ```
 orbitChain-contract/
+|-- campaign/                  # Canonical campaign contract
+|   |-- Cargo.toml
+|   `-- src/
+|       `-- lib.rs
 ├── Cargo.toml                 # Workspace configuration
 ├── crates/
 │   ├── contracts/
-│   │   └── core/             # Core Soroban smart contract
+│   │   └── core/             # Legacy compatibility/reference contract
 │   │       ├── Cargo.toml
 │   │       └── src/
 │   │           └── lib.rs    # Contract implementation
@@ -29,7 +41,8 @@ orbitChain-contract/
 
 ### Crates Overview
 
-- **`orbitchain-core`**: Main Soroban smart contract implementing the crowdfunding logic
+- **`orbitchain-campaign`**: Canonical Soroban crowdfunding contract for milestones, multi-asset donations, refunds, lifecycle controls, and analytics
+- **`orbitchain-core`**: Legacy compatibility/reference contract; do not use for new campaign features
 - **`orbitchain-tools`**: Advanced CLI utilities for contract deployment, configuration, transaction management, and debugging
 
 ## 🚀 CLI Features
@@ -121,7 +134,7 @@ For detailed documentation, refer to the inline help: run any command with `--he
    make build
 
    # Or using cargo directly
-   cargo build -p orbitchain-core --target wasm32-unknown-unknown
+   cargo build -p orbitchain-campaign --target wasm32-unknown-unknown
    ```
 
 ### Prerequisites
@@ -174,8 +187,8 @@ make help
 ### Building (Manual)
 
 ```bash
-# Build the core contract for WASM
-cargo build -p orbitchain-core --target wasm32-unknown-unknown --release
+# Build the canonical campaign contract for WASM
+cargo build -p orbitchain-campaign --target wasm32-unknown-unknown --release
 
 # Build the CLI tools
 cargo build -p orbitchain-tools
@@ -187,8 +200,8 @@ cargo build --workspace
 ### Testing
 
 ```bash
-# Run contract tests
-cargo test -p orbitchain-core
+# Run canonical campaign contract tests
+cargo test -p orbitchain-campaign
 
 # Run all tests
 cargo test --workspace
@@ -231,7 +244,7 @@ cargo run -p orbitchain-tools -- complete-wallet-signing --wallet freighter --at
 
 ## 🚀 Quick Start: Deploy Your First Contract
 
-This guide walks you through deploying the core contract to testnet and invoking the `ping` method.
+This guide walks you through deploying the canonical campaign contract to testnet and invoking a health-check method.
 
 ### Prerequisites
 
@@ -294,7 +307,7 @@ Expected output:
 
 ```
 🚀 Deploying to network: testnet
-📦 Using WASM: target/wasm32-unknown-unknown/debug/orbitchain_core.wasm
+📦 Using WASM: target/wasm32-unknown-unknown/debug/orbitchain_campaign.wasm
 ✅ Contract deployed successfully!
 📝 Contract ID: CB7...ABC
 ✅ Contract ID stored in .orbitchain_contract_id

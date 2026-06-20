@@ -206,6 +206,78 @@ pub fn storage_increment_total_raised(env: &Env, delta: i128) -> i128 {
     new_total
 }
 
+/// Total number of accepted donation calls for this campaign.
+pub fn storage_get_donation_count(env: &Env) -> u64 {
+    let value: u64 = env
+        .storage()
+        .persistent()
+        .get(&DataKey::DonationCount)
+        .unwrap_or(0);
+    bump_persistent(env, &DataKey::DonationCount);
+    value
+}
+
+/// Increment the accepted donation counter.
+pub fn storage_increment_donation_count(env: &Env) -> u64 {
+    let current = storage_get_donation_count(env);
+    let next = current
+        .checked_add(1)
+        .unwrap_or_else(|| panic_with_error!(env, Error::Overflow));
+    env.storage()
+        .persistent()
+        .set(&DataKey::DonationCount, &next);
+    bump_persistent(env, &DataKey::DonationCount);
+    next
+}
+
+/// Number of unique donor addresses that have contributed.
+pub fn storage_get_unique_donor_count(env: &Env) -> u32 {
+    let value: u32 = env
+        .storage()
+        .persistent()
+        .get(&DataKey::UniqueDonorCount)
+        .unwrap_or(0);
+    bump_persistent(env, &DataKey::UniqueDonorCount);
+    value
+}
+
+/// Increment the unique donor counter.
+pub fn storage_increment_unique_donor_count(env: &Env) -> u32 {
+    let current = storage_get_unique_donor_count(env);
+    let next = current
+        .checked_add(1)
+        .unwrap_or_else(|| panic_with_error!(env, Error::Overflow));
+    env.storage()
+        .persistent()
+        .set(&DataKey::UniqueDonorCount, &next);
+    bump_persistent(env, &DataKey::UniqueDonorCount);
+    next
+}
+
+/// Total number of completed milestone release calls for this campaign.
+pub fn storage_get_release_count(env: &Env) -> u64 {
+    let value: u64 = env
+        .storage()
+        .persistent()
+        .get(&DataKey::ReleaseCount)
+        .unwrap_or(0);
+    bump_persistent(env, &DataKey::ReleaseCount);
+    value
+}
+
+/// Increment the completed milestone release counter.
+pub fn storage_increment_release_count(env: &Env) -> u64 {
+    let current = storage_get_release_count(env);
+    let next = current
+        .checked_add(1)
+        .unwrap_or_else(|| panic_with_error!(env, Error::Overflow));
+    env.storage()
+        .persistent()
+        .set(&DataKey::ReleaseCount, &next);
+    bump_persistent(env, &DataKey::ReleaseCount);
+    next
+}
+
 // ─── Per-asset raised ─────────────────────────────────────────────────────────
 //
 // Tracks how much of the total raise came from each specific token.
@@ -327,6 +399,9 @@ pub fn bump_all_persistent(env: &Env, milestone_count: u32) {
     let core_keys = [
         DataKey::CampaignData,
         DataKey::TotalRaised,
+        DataKey::DonationCount,
+        DataKey::UniqueDonorCount,
+        DataKey::ReleaseCount,
     ];
 
     for key in &core_keys {

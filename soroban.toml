@@ -1,5 +1,5 @@
 [contract]
-name = "stellaraid-core"
+name = "orbitchain-campaign"
 version = "0.1.0"
 
 [networks.testnet]

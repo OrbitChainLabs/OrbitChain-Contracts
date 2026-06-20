@@ -1,13 +1,55 @@
 //! OrbitChain core smart contract — campaign lifecycle, donations,
 //! withdrawals, analytics, and dashboard reporting.
+//!
+//! Deprecated legacy/reference contract. `campaign/` (`orbitchain-campaign`)
+//! is the canonical implementation for new campaign work. This crate remains
+//! in the workspace only for historical compatibility and reference while any
+//! remaining behavior is gradually migrated into the canonical contract.
 
 #![no_std]
 use soroban_sdk::{
-    contract, contractimpl, contracttype, symbol_short, vec, Address, Env, String, Symbol, Vec,
+    contract, contractimpl, contracterror, contracttype, symbol_short, vec, Address, Env, String,
+    Symbol, Vec,
 };
 
 /// Issue #103 – Stellar base fee in stroops (1 XLM = 10,000,000 stroops)
 const BASE_FEE: i128 = 100;
+
+// ── Error types ──────────────────────────────────────────────────────────────
+
+/// Typed error codes for the OrbitChain core contract.
+///
+/// Each variant has a stable `u32` discriminant — **never renumber**.
+/// Callers can match on these codes programmatically instead of parsing
+/// opaque string messages out of `HostError` panics.
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum CoreError {
+    /// The requested campaign does not exist in storage.
+    CampaignNotFound = 1,
+    /// The campaign is not currently active (donations/withdrawals blocked).
+    CampaignNotActive = 2,
+    /// The supplied amount does not exceed the required base fee.
+    InsufficientAmount = 3,
+    /// The campaign does not have enough raised funds for the requested amount.
+    InsufficientFunds = 4,
+    /// The caller is not authorised to perform this operation.
+    Unauthorized = 5,
+    /// The asset symbol must be non-empty.
+    AssetNotSpecified = 6,
+    /// The contract has not been initialised (no admin set).
+    NotInitialized = 7,
+    /// No pending withdrawal request exists for this campaign.
+    NoPendingWithdrawal = 8,
+    /// A withdrawal request is already pending or approved for this campaign.
+    WithdrawalAlreadyPending = 9,
+    /// The withdrawal request is not in the `Pending` state.
+    WithdrawalNotPending = 10,
+    /// The withdrawal request must be `Approved` before it can be submitted.
+    WithdrawalNotApproved = 11,
+    /// The withdrawal amount must be greater than zero.
+    InvalidWithdrawalAmount = 12,
+}
 
 // ── Storage key helpers ──────────────────────────────────────────────────────
 
@@ -167,6 +209,16 @@ pub struct DashboardMetrics {
     pub total_transactions: u64,
 }
 
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+/// Terminates contract execution with a typed [`CoreError`] code.
+///
+/// Mirrors the pattern used in the campaign contract for consistent error
+/// handling across the workspace.
+fn panic_with_error(env: &Env, error: CoreError) -> ! {
+    env.panic_with_error(error)
+}
+
 // ── Contract ─────────────────────────────────────────────────────────────────
 
 #[contract]
@@ -239,17 +291,23 @@ impl OrbitChainContract {
         donor.require_auth();
 
         // Issue #102 – validate asset is provided
-        assert!(asset != Symbol::new(&env, ""), "Asset must be specified");
-        assert!(amount > BASE_FEE, "Amount must exceed the base fee");
+        if asset == Symbol::new(&env, "") {
+            panic_with_error(&env, CoreError::AssetNotSpecified);
+        }
+        if amount <= BASE_FEE {
+            panic_with_error(&env, CoreError::InsufficientAmount);
+        }
 
         // Issue #99 – validate campaign existence
         let mut campaign: Campaign = env
             .storage()
             .persistent()
             .get(&campaign_key(campaign_id))
-            .expect("Campaign not found");
+            .unwrap_or_else(|| panic_with_error(&env, CoreError::CampaignNotFound));
 
-        assert!(campaign.active, "Campaign is not active");
+        if !campaign.active {
+            panic_with_error(&env, CoreError::CampaignNotActive);
+        }
 
         // Issue #103 – calculate and deduct fee
         let fee = BASE_FEE;
@@ -431,16 +489,22 @@ impl OrbitChainContract {
         creator.require_auth();
 
         // Issue #130 – validate recipient (non-zero amount, valid address type enforced by SDK)
-        assert!(amount > 0, "Withdrawal amount must be positive");
+        if amount <= 0 {
+            panic_with_error(&env, CoreError::InvalidWithdrawalAmount);
+        }
 
         let campaign: Campaign = env
             .storage()
             .persistent()
             .get(&campaign_key(campaign_id))
-            .expect("Campaign not found");
+            .unwrap_or_else(|| panic_with_error(&env, CoreError::CampaignNotFound));
 
-        assert!(campaign.creator == creator, "Only campaign creator can withdraw");
-        assert!(campaign.raised >= amount, "Insufficient raised funds");
+        if campaign.creator != creator {
+            panic_with_error(&env, CoreError::Unauthorized);
+        }
+        if campaign.raised < amount {
+            panic_with_error(&env, CoreError::InsufficientFunds);
+        }
 
         // Issue #138 – prevent double withdrawals: reject if a pending request already exists
         if let Some(existing) = env
@@ -448,10 +512,9 @@ impl OrbitChainContract {
             .persistent()
             .get::<_, WithdrawalRequest>(&pending_withdrawal_key(campaign_id))
         {
-            assert!(
-                existing.status == WithdrawalStatus::Submitted,
-                "A withdrawal request is already pending or approved for this campaign"
-            );
+            if existing.status != WithdrawalStatus::Submitted {
+                panic_with_error(&env, CoreError::WithdrawalAlreadyPending);
+            }
         }
 
         // Issue #131 – store pending withdrawal for admin approval
@@ -498,24 +561,30 @@ impl OrbitChainContract {
             .storage()
             .instance()
             .get(&symbol_short!("admin"))
-            .expect("Contract not initialized");
-        assert!(admin == stored_admin, "Only admin can approve withdrawals");
+            .unwrap_or_else(|| panic_with_error(&env, CoreError::NotInitialized));
+        if admin != stored_admin {
+            panic_with_error(&env, CoreError::Unauthorized);
+        }
 
         let mut request: WithdrawalRequest = env
             .storage()
             .persistent()
             .get(&pending_withdrawal_key(campaign_id))
-            .expect("No pending withdrawal for this campaign");
+            .unwrap_or_else(|| panic_with_error(&env, CoreError::NoPendingWithdrawal));
 
-        assert!(request.status == WithdrawalStatus::Pending, "Withdrawal is not in pending state");
+        if request.status != WithdrawalStatus::Pending {
+            panic_with_error(&env, CoreError::WithdrawalNotPending);
+        }
 
         // Deduct from campaign raised balance
         let mut campaign: Campaign = env
             .storage()
             .persistent()
             .get(&campaign_key(campaign_id))
-            .expect("Campaign not found");
-        assert!(campaign.raised >= request.amount, "Insufficient funds");
+            .unwrap_or_else(|| panic_with_error(&env, CoreError::CampaignNotFound));
+        if campaign.raised < request.amount {
+            panic_with_error(&env, CoreError::InsufficientFunds);
+        }
         campaign.raised -= request.amount;
         env.storage().persistent().set(&campaign_key(campaign_id), &campaign);
 
@@ -542,19 +611,20 @@ impl OrbitChainContract {
             .storage()
             .instance()
             .get(&symbol_short!("admin"))
-            .expect("Contract not initialized");
-        assert!(admin == stored_admin, "Only admin can submit transactions");
+            .unwrap_or_else(|| panic_with_error(&env, CoreError::NotInitialized));
+        if admin != stored_admin {
+            panic_with_error(&env, CoreError::Unauthorized);
+        }
 
         let mut request: WithdrawalRequest = env
             .storage()
             .persistent()
             .get(&pending_withdrawal_key(campaign_id))
-            .expect("No withdrawal request for this campaign");
+            .unwrap_or_else(|| panic_with_error(&env, CoreError::NoPendingWithdrawal));
 
-        assert!(
-            request.status == WithdrawalStatus::Approved,
-            "Withdrawal must be approved before submission"
-        );
+        if request.status != WithdrawalStatus::Approved {
+            panic_with_error(&env, CoreError::WithdrawalNotApproved);
+        }
 
         // Issue #137 – update status to Submitted (confirmed on network)
         request.status = WithdrawalStatus::Submitted;
@@ -843,7 +913,7 @@ mod tests {
 
     /// Issue #138 – prevent double withdrawals
     #[test]
-    #[should_panic(expected = "A withdrawal request is already pending or approved")]
+    #[should_panic]
     fn test_prevent_double_withdrawal() {
         let env = Env::default();
         env.mock_all_auths();

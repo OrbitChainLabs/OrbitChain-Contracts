@@ -112,6 +112,55 @@ fn setup_single_milestone_campaign_with_funding(env: &Env) {
     create_test_milestone(env, 0, 3000, MilestoneStatus::Unlocked);
 }
 
+/// Creates a campaign accepting `asset_count` distinct assets, mints
+/// `funding_per_asset` tokens of each into the contract, and returns the
+/// list of token issuer addresses in the same order as `accepted_assets`.
+fn create_multi_asset_campaign_with_funding(
+    env: &Env,
+    creator: &Address,
+    milestone_count: u32,
+    asset_count: u32,
+    funding_per_asset: i128,
+) -> Vec<Address> {
+    let mut assets: Vec<StellarAsset> = Vec::new(env);
+    let mut issuers: Vec<Address> = Vec::new(env);
+
+    for i in 0..asset_count {
+        let token_admin = Address::generate(env);
+        let token_issuer = env.register_stellar_asset_contract(token_admin.clone());
+        let code = match i {
+            0 => "XLM",
+            1 => "USDC",
+            _ => "EURC",
+        };
+        assets.push_back(StellarAsset {
+            asset_code: String::from_str(env, code),
+            issuer: Some(token_issuer.clone()),
+        });
+        issuers.push_back(token_issuer.clone());
+
+        let token_admin_client = StellarAssetClient::new(env, &token_issuer);
+        token_admin_client.mint(&env.current_contract_address(), &funding_per_asset);
+    }
+
+    let campaign = CampaignData {
+        creator: creator.clone(),
+        goal_amount: 3000,
+        raised_amount: 3000,
+        end_time: env.ledger().timestamp() + 86_400,
+        status: CampaignStatus::Active,
+        accepted_assets: assets,
+        milestone_count,
+        min_donation_amount: 0,
+        created_at_ledger: env.ledger().sequence(),
+        created_at_time: env.ledger().timestamp(),
+        concluded_at_ledger: None,
+    };
+    set_campaign(env, &campaign);
+
+    issuers
+}
+
 /// Creates a simple campaign with one unlocked milestone WITHOUT minting tokens.
 /// For tests that panic before reaching token transfers.
 fn setup_single_milestone_campaign_no_funding(env: &Env) {
@@ -327,6 +376,81 @@ fn test_release_non_existent_milestone_panics() {
         setup_single_milestone_campaign_no_funding(&env);
         let recipient = Address::generate(&env);
         crate::release_milestone::release_milestone(&env, 5, recipient);
+    });
+}
+
+// ─── Single-asset isolation: only the primary asset is touched ────────────────
+
+/// Test: with one accepted asset, the correct amount is transferred and the
+/// contract balance decreases by exactly the release amount.
+#[test]
+fn test_release_with_single_asset_transfers_correct_amount() {
+    let env = Env::default();
+    env.ledger().set_timestamp(BASE);
+    env.mock_all_auths();
+    with_contract(&env, || {
+        let creator = Address::generate(&env);
+        let issuers = create_multi_asset_campaign_with_funding(&env, &creator, 1, 1, 10_000_000);
+        create_test_milestone(&env, 0, 3000, MilestoneStatus::Unlocked);
+        let recipient = Address::generate(&env);
+
+        crate::release_milestone::release_milestone(&env, 0, recipient.clone());
+
+        let token_client = soroban_sdk::token::Client::new(&env, &issuers.get(0).unwrap());
+        assert_eq!(token_client.balance(&recipient), 3000);
+        assert_eq!(
+            token_client.balance(&env.current_contract_address()),
+            10_000_000 - 3000
+        );
+    });
+}
+
+/// Test: with three accepted assets, only the first (primary) asset is
+/// debited. The other two assets' balances must remain untouched — this is
+/// the regression test for the fund-draining vulnerability where
+/// `release_milestone` transferred the full release amount from every
+/// accepted asset instead of just one.
+#[test]
+fn test_release_with_multiple_assets_only_debits_first_asset() {
+    let env = Env::default();
+    env.ledger().set_timestamp(BASE);
+    env.mock_all_auths();
+    with_contract(&env, || {
+        let creator = Address::generate(&env);
+        let funding_per_asset = 10_000_000i128;
+        let issuers =
+            create_multi_asset_campaign_with_funding(&env, &creator, 1, 3, funding_per_asset);
+        create_test_milestone(&env, 0, 3000, MilestoneStatus::Unlocked);
+        let recipient = Address::generate(&env);
+
+        crate::release_milestone::release_milestone(&env, 0, recipient.clone());
+
+        let milestone = get_milestone(&env, 0).expect("Milestone should exist");
+        assert_eq!(milestone.status, MilestoneStatus::Released);
+        assert_eq!(milestone.released_amount, milestone.target_amount);
+
+        // Primary asset (first accepted asset) was debited by the release amount.
+        let primary_client = soroban_sdk::token::Client::new(&env, &issuers.get(0).unwrap());
+        assert_eq!(primary_client.balance(&recipient), 3000);
+        assert_eq!(
+            primary_client.balance(&env.current_contract_address()),
+            funding_per_asset - 3000
+        );
+
+        // Secondary assets must remain completely untouched.
+        let second_client = soroban_sdk::token::Client::new(&env, &issuers.get(1).unwrap());
+        assert_eq!(
+            second_client.balance(&env.current_contract_address()),
+            funding_per_asset
+        );
+        assert_eq!(second_client.balance(&recipient), 0);
+
+        let third_client = soroban_sdk::token::Client::new(&env, &issuers.get(2).unwrap());
+        assert_eq!(
+            third_client.balance(&env.current_contract_address()),
+            funding_per_asset
+        );
+        assert_eq!(third_client.balance(&recipient), 0);
     });
 }
 

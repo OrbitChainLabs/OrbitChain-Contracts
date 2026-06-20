@@ -4,7 +4,7 @@ use crate::types::{Error, MilestoneStatus, StellarAsset};
 use crate::storage::{
     acquire_lock, get_campaign, get_milestone, release_lock, set_milestone,
     storage_get_asset_raised, storage_get_total_raised,
-    storage_set_total_raised, storage_set_asset_raised,
+    storage_increment_release_count, storage_set_total_raised, storage_set_asset_raised,
 };
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -203,6 +203,7 @@ pub fn release_milestone_multi_asset(
         panic_with_error!(env, Error::LedgerUnderflow);
     }
     storage_set_total_raised(env, new_total_raised);
+    storage_increment_release_count(env);
 
     // Issue #242 – Release reentrancy lock
     release_lock(env);

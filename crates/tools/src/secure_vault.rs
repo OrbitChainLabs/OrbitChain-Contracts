@@ -1,7 +1,12 @@
 //! Secure vault for admin and issuing key management.
 //!
 //! Reads keys from environment variables, validates them for testnet/mainnet,
-//! masks secrets for safe display, and saves/loads vault configuration files.
+//! and masks secrets for safe display.
+//!
+//! # Security Notice
+//! `SecureVault::save_to_file()` has been disabled — it stored secret keys in
+//! plaintext. Use `EncryptedVault::save_to_file()` (AES-256-GCM) instead via:
+//! `orbitchain-cli keymanager vault-save <path>`
 
 use anyhow::{Context, Result};
 use std::env;
@@ -85,7 +90,11 @@ impl SecureVault {
 
         match &self.admin_secret_key {
             Some(key) if key.len() > 10 => {
-                println!("Admin Secret Key: {}...{}", &key[..4], &key[key.len() - 4..])
+                println!(
+                    "Admin Secret Key: {}...{}",
+                    &key[..4],
+                    &key[key.len() - 4..]
+                )
             }
             Some(_) => println!("Admin Secret Key: ***"),
             None => println!("Admin Secret Key: ⚠️  Not set"),
@@ -98,7 +107,11 @@ impl SecureVault {
 
         match &self.issuing_secret_key {
             Some(key) if key.len() > 10 => {
-                println!("Issuing Secret Key: {}...{}", &key[..4], &key[key.len() - 4..])
+                println!(
+                    "Issuing Secret Key: {}...{}",
+                    &key[..4],
+                    &key[key.len() - 4..]
+                )
             }
             Some(_) => println!("Issuing Secret Key: ***"),
             None => println!("Issuing Secret Key: ⚠️  Not set"),
@@ -106,33 +119,14 @@ impl SecureVault {
     }
 
     /// Save vault to encrypted file (placeholder for future encryption)
-    pub fn save_to_file(&self, path: &str) -> Result<()> {
-        // WARNING: In production, use proper encryption
-        // This is a placeholder - never store secrets in plaintext
-        let content = format!(
-            "# Secure Vault Configuration\n# WARNING: Keep this file secure!\n\n\
-             SOROBAN_ADMIN_SECRET_KEY={}\n\
-             SOROBAN_ADMIN_PUBLIC_KEY={}\n\
-             SOROBAN_ISSUING_SECRET_KEY={}\n\
-             SOROBAN_ISSUING_PUBLIC_KEY={}\n",
-            self.admin_secret_key.as_deref().unwrap_or(""),
-            self.admin_public_key.as_deref().unwrap_or(""),
-            self.issuing_secret_key.as_deref().unwrap_or(""),
-            self.issuing_public_key.as_deref().unwrap_or("")
-        );
-
-        fs::write(path, content).context("Failed to write vault file")?;
-
-        // Set file permissions to owner-only (Unix)
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let mut perms = fs::metadata(path)?.permissions();
-            perms.set_mode(0o600);
-            fs::set_permissions(path, perms)?;
-        }
-
-        Ok(())
+    /// Save vault to encrypted file (placeholder for future encryption)
+    /// # Deprecated
+    /// This method stores keys in plaintext. Use `EncryptedVault::save_to_file()` instead.
+    pub fn save_to_file(&self, _path: &str) -> Result<()> {
+        eprintln!("🚨 ERROR: SecureVault::save_to_file() stores keys in PLAINTEXT.");
+        eprintln!("   Use EncryptedVault::save_to_file() instead.");
+        eprintln!("   Example: orbitchain-cli keymanager vault-save <path>");
+        anyhow::bail!("Plaintext vault save disabled for security. Use EncryptedVault.");
     }
 
     /// Load vault from file

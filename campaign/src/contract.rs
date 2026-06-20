@@ -7,6 +7,7 @@ use soroban_sdk::{panic_with_error, Address, Env};
 use crate::event;
 use crate::storage::{get_campaign, set_campaign};
 use crate::types::{CampaignStatus, Error};
+use crate::validate_campaign_transition;
 
 /// Issue #212 – End the campaign early (before deadline).
 ///
@@ -23,11 +24,8 @@ pub fn end_campaign(env: &Env) {
 
     campaign.creator.require_auth();
 
-    let current_status = campaign.status;
-    match current_status {
-        CampaignStatus::Active | CampaignStatus::GoalReached => {}
-        _ => panic_with_error!(env, Error::InvalidCampaignTransition),
-    }
+    validate_campaign_transition(env, &campaign.status, &CampaignStatus::Ended)
+        .unwrap_or_else(|e| panic_with_error!(env, e));
 
     campaign.status = CampaignStatus::Ended;
     campaign.concluded_at_ledger = Some(env.ledger().sequence());
@@ -51,11 +49,8 @@ pub fn cancel_campaign(env: &Env) {
 
     campaign.creator.require_auth();
 
-    let current_status = campaign.status;
-    match current_status {
-        CampaignStatus::Cancelled => panic_with_error!(env, Error::InvalidCampaignTransition),
-        _ => {} // Any non-cancelled status can transition to Cancelled
-    }
+    validate_campaign_transition(env, &campaign.status, &CampaignStatus::Cancelled)
+        .unwrap_or_else(|e| panic_with_error!(env, e));
 
     campaign.status = CampaignStatus::Cancelled;
     campaign.concluded_at_ledger = Some(env.ledger().sequence());
@@ -80,8 +75,7 @@ pub fn extend_deadline(env: &Env, new_end_time: u64) {
 
     campaign.creator.require_auth();
 
-    let current_status = campaign.status;
-    match current_status {
+    match campaign.status {
         CampaignStatus::Active | CampaignStatus::GoalReached => {}
         _ => panic_with_error!(env, Error::InvalidCampaignTransition),
     }
