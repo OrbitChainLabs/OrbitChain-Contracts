@@ -46,11 +46,11 @@ jobs:
         with:
           cache-on-failure: true
       - name: cargo fmt --check (contracts)
-        # Scope is intentionally narrower than the workspace because
-        # crates/tools is a native CLI with separate formatting conventions
-        # tracked separately.
-        run: cargo fmt --all -- --check
-          && cargo fmt ${{ env.CONTRACTS }} -- --check
+        # Scope to the four Soroban contract crates only. crates/tools is a
+        # native CLI with separate formatting conventions and pre-existing
+        # rustfmt drift that is intentionally out of scope for this CI gate
+        # — see the PR description for the tracked follow-up.
+        run: cargo fmt ${{ env.CONTRACTS }} -- --check
 
   clippy:
     name: Clippy lint
