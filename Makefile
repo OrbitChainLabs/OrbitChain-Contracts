@@ -82,12 +82,20 @@ deploy-testnet: build-wasm
 
 # Run cargo-audit for vulnerability scanning
 audit:
+	@if ! command -v cargo-audit >/dev/null 2>&1; then \
+		echo "❌ cargo-audit not installed. Run 'cargo install cargo-audit --locked' then retry." >&2; \
+		exit 1; \
+	fi
 	@echo "🔒 Running security audit..."
 	cargo audit
 	@echo "✅ Security audit passed"
 
 # Run cargo-deny for license compliance
 deny:
+	@if ! command -v cargo-deny >/dev/null 2>&1; then \
+		echo "❌ cargo-deny not installed. Run 'cargo install cargo-deny --locked' then retry." >&2; \
+		exit 1; \
+	fi
 	@echo "📋 Checking license compliance..."
 	cargo deny check
 	@echo "✅ License check passed"
@@ -112,5 +120,7 @@ help:
 	@echo "  make sandbox-start  - Start local Stellar sandbox (requires Docker)"
 	@echo "  make deploy-sandbox - Deploy contract to local sandbox"
 	@echo "  make deploy-testnet - Deploy contract to Stellar testnet"
+	@echo "  make audit          - Run cargo-audit vulnerability scan"
+	@echo "  make deny           - Run cargo-deny policy checks"
 	@echo "  make optimize       - Optimize WASM with wasm-opt -Oz"
 	@echo "  make help           - Show this help message"

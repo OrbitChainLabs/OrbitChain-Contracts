@@ -108,3 +108,41 @@ jobs:
           cache-on-failure: true
       - name: cargo check --target wasm32v1-none (contracts)
         run: cargo check ${{ env.CONTRACTS }} --target wasm32v1-none
+
+  audit:
+    name: Security audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          cache: false
+      - name: Cache cargo registry and target
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+      - name: make audit
+        run: make audit
+
+  deny:
+    name: Dependency policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          cache: false
+      - name: Cache cargo registry and target
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked
+      - name: make deny
+        run: make deny
