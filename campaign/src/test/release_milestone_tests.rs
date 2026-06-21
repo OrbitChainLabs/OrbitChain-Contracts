@@ -470,3 +470,79 @@ fn test_frozen_contract_release_panics() {
         crate::release_milestone::release_milestone(&env, 0, recipient);
     });
 }
+
+// ─── Skip events: assets without issuers are skipped gracefully ───────────────
+
+/// Test: when an asset has no issuer (native XLM), a milestone_release_skipped
+/// event is emitted and the release continues with other assets.
+#[test]
+fn test_native_asset_skip_emits_event() {
+    let env = Env::default();
+    env.ledger().set_timestamp(BASE);
+    env.mock_all_auths();
+    with_contract(&env, || {
+        let creator = Address::generate(&env);
+        
+        // Create a campaign with one asset that has an issuer
+        let token_admin = Address::generate(&env);
+        let token_issuer = env.register_stellar_asset_contract(token_admin.clone());
+        
+        let mut assets: Vec<StellarAsset> = Vec::new(&env);
+        // Add native asset (no issuer)
+        assets.push_back(StellarAsset {
+            asset_code: String::from_str(&env, "XLM"),
+            issuer: None,
+        });
+        // Add an asset with issuer
+        assets.push_back(StellarAsset {
+            asset_code: String::from_str(&env, "USDC"),
+            issuer: Some(token_issuer.clone()),
+        });
+        
+        let campaign = CampaignData {
+            creator: creator.clone(),
+            goal_amount: 3000,
+            raised_amount: 3000,
+            end_time: env.ledger().timestamp() + 86_400,
+            status: CampaignStatus::Active,
+            accepted_assets: assets,
+            milestone_count: 1,
+            min_donation_amount: 0,
+            created_at_ledger: env.ledger().sequence(),
+            created_at_time: env.ledger().timestamp(),
+            concluded_at_ledger: None,
+        };
+        set_campaign(&env, &campaign);
+        
+        // Mint tokens for the USDC asset
+        let token_admin_client = StellarAssetClient::new(&env, &token_issuer);
+        token_admin_client.mint(&env.current_contract_address(), &10_000_000i128);
+        
+        create_test_milestone(&env, 0, 3000, MilestoneStatus::Unlocked);
+        let recipient = Address::generate(&env);
+        
+        // Release should succeed and emit skip event for XLM
+        crate::release_milestone::release_milestone(&env, 0, recipient.clone());
+        
+        // Verify USDC was released
+        let token_client = soroban_sdk::token::Client::new(&env, &token_issuer);
+        assert_eq!(token_client.balance(&recipient), 3000);
+        
+        // Verify milestone status is Released
+        let milestone = get_milestone(&env, 0).expect("Milestone should exist");
+        assert_eq!(milestone.status, MilestoneStatus::Released);
+        
+        // Verify skip event was emitted with correct topic
+        let events = env.events().all();
+        let skip_event = events.iter().find(|e| {
+            e.topics == (soroban_sdk::Symbol::new(&env, "campaign"), soroban_sdk::Symbol::new(&env, "milestone_release_skipped"))
+        });
+        assert!(skip_event.is_some(), "milestone_release_skipped event should be emitted");
+        
+        // Verify completion event was emitted
+        let completed_event = events.iter().find(|e| {
+            e.topics == (soroban_sdk::Symbol::new(&env, "campaign"), soroban_sdk::Symbol::new(&env, "milestone_release_completed"))
+        });
+        assert!(completed_event.is_some(), "milestone_release_completed event should be emitted");
+    });
+}

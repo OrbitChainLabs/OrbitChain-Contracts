@@ -83,3 +83,30 @@ pub fn contract_unfrozen(env: &Env, admin: &Address, timestamp: u64) {
         (admin, timestamp),
     );
 }
+
+/// Emitted when a milestone release skips an asset (no issuer, dust, etc.).
+pub fn milestone_release_skipped(
+    env: &Env,
+    milestone_index: u32,
+    asset_code: String,
+    reason: Symbol,
+) {
+    env.events().publish(
+        ("campaign", "milestone_release_skipped"),
+        (milestone_index, asset_code, reason),
+    );
+}
+
+/// Emitted after all per-asset releases complete for a milestone.
+pub fn milestone_release_completed(
+    env: &Env,
+    milestone_index: u32,
+    total_released: i128,
+    asset_count: u32,
+    timestamp: u64,
+) {
+    env.events().publish(
+        ("campaign", "milestone_release_completed"),
+        (milestone_index, total_released, asset_count, timestamp),
+    );
+}

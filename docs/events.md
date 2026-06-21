@@ -76,6 +76,41 @@ is emitted per asset.
 
 ---
 
+## `milestone_release_skipped`
+
+Emitted when an asset is skipped during milestone release due to missing issuer,
+dust amount, or other release condition.
+
+**Topics:** `["campaign", "milestone_release_skipped"]`
+
+**Data:**
+
+| Field | Type | Description |
+|---|---|---|
+| `milestone_index` | `u32` | Zero-based milestone index |
+| `asset_code` | `String` | Asset code that was skipped (e.g. `"XLM"`) |
+| `reason` | `Symbol` | Skip reason: `"no_issuer"`, `"dust_below_minimum"`, `"zero_release_amount"`, or `"already_released"` |
+
+---
+
+## `milestone_release_completed`
+
+Emitted after all per-asset releases complete for a milestone.
+Allows indexers to detect the end of a release without counting individual events.
+
+**Topics:** `["campaign", "milestone_release_completed"]`
+
+**Data:**
+
+| Field | Type | Description |
+|---|---|---|
+| `milestone_index` | `u32` | Zero-based milestone index |
+| `total_released` | `i128` | Total amount released across all assets in stroops |
+| `asset_count` | `u32` | Number of accepted assets in the campaign |
+| `timestamp` | `u64` | Ledger timestamp of the release |
+
+---
+
 ## `campaign_ended`
 
 Emitted when the campaign transitions to the `Ended` state (deadline passed or concluded normally).
