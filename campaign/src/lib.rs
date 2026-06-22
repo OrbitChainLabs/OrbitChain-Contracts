@@ -790,6 +790,7 @@ pub fn validate_milestone_transition(
 #[cfg(test)]
 mod test {
     pub mod claim_refund_tests;
+    pub mod error_discriminant_tests;
     pub mod get_campaign_status_tests;
     pub mod integration_tests;
     pub mod invariant_tests;

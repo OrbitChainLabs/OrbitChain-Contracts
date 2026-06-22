@@ -9,6 +9,10 @@ use soroban_sdk::{contracterror, contracttype, Address, BytesN, Env, String, Vec
 /// Codes are stable — never renumber an existing variant; only append new ones.
 /// Each code maps to a `u32` via `contracterror` and is surfaced in transaction
 /// results as `Error(Contract, #N)`.
+///
+/// Campaign owns the `1..=999` contract-local error namespace. Shared workspace
+/// errors from `common::ErrorCode` are reserved for `1000..=1099`; keep the two
+/// ranges disjoint whenever a new variant is added.
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Error {

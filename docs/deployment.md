@@ -47,6 +47,18 @@ timestamp. This prevents accidental or malicious `u64`-scale future dates from
 making status views, refund-window checks, milestone release arithmetic, and
 campaign reports meaningless while still allowing long-running campaigns.
 
+## Error-Code Migration Note
+
+`campaign::types::Error` owns the contract-local `1..=999` error namespace.
+`common::ErrorCode` owns the shared workspace `1000..=1099` namespace. This
+keeps `Error(Contract, #N)` values unambiguous for off-chain indexers and any
+future crate that imports both enums.
+
+If a deployed integration previously interpreted `common::ErrorCode` values as
+`1..=4`, migrate that integration before it consumes the shared crate again:
+`NotInitialized=1000`, `AlreadyInitialized=1001`, `Unauthorized=1002`, and
+`InvalidAmount=1003`. Campaign contract error values are unchanged.
+
 ## Troubleshooting
 
 - **`InsufficientFee`**: Add `--fee 1000000` to the deploy command.
