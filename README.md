@@ -536,6 +536,18 @@ Open a Pull Request from your fork back to the main branch.
 
 This project uses `cargo-audit` and `cargo-deny` to maintain high security standards and license compliance.
 
+### Prerequisites
+
+Before running security scans locally, install the required tools:
+
+```bash
+# Install cargo-audit for vulnerability scanning
+cargo install cargo-audit --locked
+
+# Install cargo-deny for license and policy compliance
+cargo install cargo-deny --locked
+```
+
 ### Local Scans
 
 You can run the security scans locally using the following commands:
@@ -567,7 +579,7 @@ If a license or ban policy violation is found:
 
 ### Automated CI
 
-Security scans are automatically run on every push and pull request. CI will fail if any known vulnerabilities or policy violations are detected.
+Security scans are automatically run on every push and pull request via dedicated CI jobs. The CI pipeline installs `cargo-audit` and `cargo-deny` automatically before running the scans. CI will fail if any known vulnerabilities or policy violations are detected.
 
 # 📜 License
 

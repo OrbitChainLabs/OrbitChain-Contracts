@@ -3,6 +3,8 @@ name = "orbitchain-core"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license = "MIT"
+publish = false
 description = "Legacy OrbitChain campaign reference contract; canonical implementation lives in orbitchain-campaign"
 
 [lib]

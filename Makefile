@@ -7,7 +7,7 @@
 ##   make clippy       - Lint code
 
 .PHONY: build build-wasm build-tools test fmt lint clean optimize help \
-        setup deploy-testnet deploy-sandbox sandbox-start audit deny
+        setup deploy-testnet deploy-sandbox sandbox-start audit deny audit-ci deny-ci
 
 # Default target
 build: build-wasm build-tools
@@ -82,12 +82,36 @@ deploy-testnet: build-wasm
 
 # Run cargo-audit for vulnerability scanning
 audit:
+	@if ! command -v cargo-audit >/dev/null 2>&1; then \
+		echo "❌ cargo-audit not installed. Run 'cargo install cargo-audit --locked' then retry." >&2; \
+		exit 1; \
+	fi
 	@echo "🔒 Running security audit..."
 	cargo audit
 	@echo "✅ Security audit passed"
 
 # Run cargo-deny for license compliance
 deny:
+	@if ! command -v cargo-deny >/dev/null 2>&1; then \
+		echo "❌ cargo-deny not installed. Run 'cargo install cargo-deny --locked' then retry." >&2; \
+		exit 1; \
+	fi
+	@echo "📋 Checking license compliance..."
+	cargo deny check
+	@echo "✅ License check passed"
+
+# Security audit (CI variant — installs tool if missing)
+audit-ci:
+	@echo "🔒 Installing cargo-audit (CI)..."
+	cargo install cargo-audit --locked 2>&1 | tail -1
+	@echo "🔒 Running security audit..."
+	cargo audit
+	@echo "✅ Security audit passed"
+
+# License check (CI variant — installs tool if missing)
+deny-ci:
+	@echo "📋 Installing cargo-deny (CI)..."
+	cargo install cargo-deny --locked 2>&1 | tail -1
 	@echo "📋 Checking license compliance..."
 	cargo deny check
 	@echo "✅ License check passed"
@@ -113,4 +137,6 @@ help:
 	@echo "  make deploy-sandbox - Deploy contract to local sandbox"
 	@echo "  make deploy-testnet - Deploy contract to Stellar testnet"
 	@echo "  make optimize       - Optimize WASM with wasm-opt -Oz"
+	@echo "  make audit          - Run cargo audit (requires cargo-audit)"
+	@echo "  make deny           - Run cargo deny (requires cargo-deny)"
 	@echo "  make help           - Show this help message"

@@ -3,6 +3,8 @@ name = "orbitchain-tools"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license = "MIT"
+publish = false
 description = "OrbitChain CLI tools — key management, signing, asset issuing, and payment processing"
 
 [[bin]]

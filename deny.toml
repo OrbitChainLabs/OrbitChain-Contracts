@@ -1,0 +1,59 @@
+# cargo-deny configuration
+# Run `cargo deny check` to verify license compliance
+
+[advisories]
+# Advisories to ignore (after review)
+ignore = [
+    # dotenv v0.15.0 is unmaintained (RUSTSEC-2021-0141);
+    # used by orbitchain-tools for environment variable loading
+    "RUSTSEC-2021-0141",
+]
+# How to handle yanked crates: deny, warn (default), or allow
+yanked = "warn"
+# How to handle unmaintained advisories: all, workspace, transitive, none
+unmaintained = "workspace"
+# How to handle unsound advisories: all, workspace (default), transitive, none
+unsound = "workspace"
+# Warn about unused ignored advisories
+unused-ignored-advisory = "warn"
+
+[licenses]
+# List of allowed licenses.
+# See https://spdx.org/licenses/ for full list.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+# Confidence threshold for license detection (0.0 - 1.0)
+confidence-threshold = 0.8
+# Warn about unused allowed licenses
+unused-allowed-license = "warn"
+
+# Specific exceptions for crates that need additional licenses
+# [[licenses.exceptions]]
+# allow = ["License-Id"]
+# crate = "crate-name"
+
+[bans]
+# Specific crates that are banned
+deny = [
+    # Example: { name = "openssl", reason = "Using rustls instead" },
+]
+# Skip these specific crates from being checked
+skip = []
+# Skip entire trees
+skip-tree = []
+
+[sources]
+# Only allow crates from crates.io by default
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+# Deny unknown registries
+unknown-registry = "deny"
+# Deny git sources unless explicitly allowed
+unknown-git = "deny"
