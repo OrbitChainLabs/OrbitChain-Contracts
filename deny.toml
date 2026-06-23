@@ -1,0 +1,60 @@
+# cargo-deny configuration
+# Run `cargo deny check` to verify license compliance
+
+[graph]
+# Ignore certain dependency graphs
+skip-tree = []
+
+[advisories]
+# Ignored advisories can be listed here after review
+ignore = []
+# Set to 1 to fail on unmaintained crates, 2 to warn only
+severity-threshold = 1
+
+[licenses]
+# List of allowed licenses.
+# See https://spdx.org/licenses/ for full list.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Unlicense",
+    "CC0-1.0",
+    "Zlib",
+    "0BSD",
+    "MPL-2.0",
+    "OpenSSL",
+]
+# Confidence threshold for license detection (0.0 - 1.0)
+confidence-threshold = 0.8
+# If true, fails the check when a license expression is not explicitly
+# listed in `allow` and no license information can be determined.
+deny = [
+    # Common or unknown licenses that should be denied
+]
+# If true, fail the check on copyleft licenses
+unlicensed = "deny"
+allow-osi-fsf-free = "neither"
+default = "deny"
+
+[bans]
+# Specific crates that are banned
+deny = [
+    # Example: { name = "openssl", reason = "Using rustls instead" },
+]
+# Skip these specific crates from being checked
+skip = []
+# Skip entire trees
+skip-tree = []
+
+[sources]
+# Only allow crates from crates.io by default
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+# Deny unknown registries
+unknown-registry = "deny"
+# Deny git sources unless explicitly allowed
+unknown-git = "deny"
