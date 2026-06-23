@@ -1,13 +1,16 @@
 //! Common types shared across the OrbitChain workspace.
 //!
 //! This crate provides canonical definitions for `CampaignStatus`, `MilestoneStatus`,
-//! `AssetInfo`, and `ErrorCode` used by both campaign and core contracts.
+//! and `AssetInfo` used by both campaign and core contracts.
 //!
-//! # Versioning
-//! All discriminants are stable — never renumber existing variants.
+//! This crate intentionally does **not** define a `#[contracterror]` enum.
+//! Contract-specific crates own their typed error spaces so shared data types
+//! cannot accidentally collide with stable on-chain error discriminants.
+//! Campaign errors live in `orbitchain-campaign::types::Error`; the deprecated
+//! reference core contract keeps its separate `CoreError` until it is retired.
 
 #![no_std]
-use soroban_sdk::{contracterror, contracttype};
+use soroban_sdk::contracttype;
 
 #[contracttype]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -38,17 +41,4 @@ pub enum MilestoneStatus {
 pub struct AssetInfo {
     pub code: u32,
     pub issuer: u32,
-}
-
-#[contracterror]
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum ErrorCode {
-    /// Contract has not been initialized yet.
-    NotInitialized = 1,
-    /// Contract has already been initialized.
-    AlreadyInitialized = 2,
-    /// Caller is not authorized to perform this operation.
-    Unauthorized = 3,
-    /// The amount supplied is invalid (zero, negative, or out of range).
-    InvalidAmount = 4,
 }

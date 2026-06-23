@@ -40,6 +40,19 @@ stellar contract deploy   --wasm target/wasm32v1-none/release/campaign.wasm   --
 stellar contract invoke   --id $CONTRACT_ID   --source $STELLAR_SECRET_KEY   --network testnet   -- initialize
 ```
 
+## Error Code Stability
+
+The campaign contract owns the canonical `#[contracterror]` enum for campaign
+failures in `campaign/src/types.rs`. The shared `common` crate intentionally
+does not publish a `#[contracterror]` enum; it only contains reusable data
+types. This avoids overlapping stable discriminants between shared and
+contract-local crates while preserving the campaign error numbers that may
+already appear in `Error(Contract, #N)` results.
+
+No migration or redeployment sequencing is required for this cleanup because no
+existing campaign error discriminants were renumbered. Off-chain indexers should
+continue to interpret campaign failures with the campaign error table.
+
 ## Deadline Extensions
 
 Campaign deadline extensions are capped at ten years from the current ledger

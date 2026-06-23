@@ -6,11 +6,13 @@ use soroban_sdk::{
 
 // ─── Error enum ───────────────────────────────────────────────────────────────
 
-/// All error codes for the campaign contract.
+/// Canonical typed error codes for the campaign contract.
 ///
 /// Codes are stable — never renumber an existing variant; only append new ones.
 /// Each code maps to a `u32` via `contracterror` and is surfaced in transaction
-/// results as `Error(Contract, #N)`.
+/// results as `Error(Contract, #N)`. The shared `orbitchain-common` crate
+/// intentionally does not define a `#[contracterror]` enum, so these campaign
+/// discriminants cannot collide with a second shared error space.
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Error {
@@ -110,6 +112,61 @@ pub enum Error {
     // ── Upgrade / freeze ─────────────────────────────────────────────────── 8x
     /// Contract is frozen; all mutating operations are blocked.
     ContractFrozen = 80,
+}
+
+#[cfg(test)]
+mod error_code_tests {
+    use super::Error;
+    #[test]
+    fn campaign_error_discriminants_are_unique_without_common_error_space() {
+        // `orbitchain-common` intentionally exposes no `#[contracterror]` enum;
+        // this guards the remaining campaign-local error space against internal
+        // duplicate discriminants while preserving the stable on-chain codes.
+        let campaign_codes = [
+            Error::AlreadyInitialized as u32,
+            Error::NotInitialized as u32,
+            Error::Unauthorized as u32,
+            Error::CampaignEnded as u32,
+            Error::CampaignNotActive as u32,
+            Error::AssetNotAccepted as u32,
+            Error::DonationTooSmall as u32,
+            Error::MilestoneNotFound as u32,
+            Error::MilestoneNotUnlocked as u32,
+            Error::PreviousMilestoneNotReleased as u32,
+            Error::CannotCancelWithFunds as u32,
+            Error::RefundWindowClosed as u32,
+            Error::InvalidGoalAmount as u32,
+            Error::InvalidEndTime as u32,
+            Error::InvalidMilestones as u32,
+            Error::InsufficientContractBalance as u32,
+            Error::Overflow as u32,
+            Error::InvalidAssets as u32,
+            Error::InvalidAssetCode as u32,
+            Error::MilestoneMismatch as u32,
+            Error::InvalidMilestoneCount as u32,
+            Error::InvalidCampaignTransition as u32,
+            Error::InvalidMilestoneTransition as u32,
+            Error::GoalNotReached as u32,
+            Error::InvalidStorageValue as u32,
+            Error::StorageWriteError as u32,
+            Error::InvalidRecipient as u32,
+            Error::MissingIssuerAddress as u32,
+            Error::ZeroReleaseAmount as u32,
+            Error::NothingToRelease as u32,
+            Error::MilestoneReleasedExceedsTarget as u32,
+            Error::MilestoneAlreadyReleased as u32,
+            Error::UnreleasedMilestonesExist as u32,
+            Error::RefundNotPermitted as u32,
+            Error::NoDonorRecord as u32,
+            Error::RefundAlreadyClaimed as u32,
+            Error::ReentrantCall as u32,
+            Error::InvalidAmount as u32,
+            Error::ContractFrozen as u32,
+        ];
+        for (index, code) in campaign_codes.iter().enumerate() {
+            assert!(!campaign_codes[index + 1..].contains(code));
+        }
+    }
 }
 
 // ─── Campaign lifecycle ───────────────────────────────────────────────────────
