@@ -142,3 +142,25 @@ pub fn get_campaign_status(env: &Env) -> crate::types::CampaignStatusResponse {
         days_remaining,
     }
 }
+
+/// Issue #45 — Get campaign hours remaining until deadline.
+///
+/// Returns the hours portion of the remaining time (0 to 23) in the current day before the deadline.
+/// If the deadline has passed, returns 0.
+/// No auth required (read-only view).
+///
+/// # Panics
+/// - `Error::NotInitialized` if campaign not initialized
+#[must_use]
+pub fn get_campaign_hours_remaining(env: &Env) -> u32 {
+    let campaign =
+        get_campaign(env).unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized));
+
+    let now = env.ledger().timestamp();
+    if now < campaign.end_time {
+        let delta = campaign.end_time - now;
+        ((delta % 86_400) / 3_600) as u32
+    } else {
+        0
+    }
+}

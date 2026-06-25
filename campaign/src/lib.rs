@@ -514,6 +514,12 @@ impl CampaignContract {
         contract::get_campaign_status(&env)
     }
 
+    /// Issue #45 – Get campaign hours remaining until deadline.
+    /// No auth required (read-only view).
+    pub fn get_campaign_hours_remaining(env: Env) -> u32 {
+        contract::get_campaign_hours_remaining(&env)
+    }
+
     /// Issue #207 – Release a single milestone (all assets proportionally).
     ///
     /// Issue #242 – Reentrancy protection: acquires lock at entry, releases at exit.
