@@ -211,8 +211,6 @@ impl CampaignContract {
         storage_increment_asset_raised(&env, &asset_address, amount);
         increment_donor_asset_donation(&env, &donor, &asset_address, amount);
 
-        let _donor_record =
-            get_donor(&env, &donor).unwrap_or(DonorRecord::new_for(donor.clone(), asset.clone()));
         // Update donor record
         let existing_donor = get_donor(&env, &donor);
         let is_new_donor = existing_donor.is_none();
