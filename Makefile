@@ -53,8 +53,8 @@ clean:
 setup:
 	@echo "🔧 Installing soroban-cli..."
 	cargo install --locked stellar-cli --features opt
-	@echo "🔧 Adding wasm32-unknown-unknown target..."
-	rustup target add wasm32-unknown-unknown
+	@echo "🔧 Adding wasm32v1-none target..."
+	rustup target add wasm32v1-none
 	@echo "✅ Setup complete. Run 'make build' to compile contracts."
 
 # Start local sandbox (requires Docker)

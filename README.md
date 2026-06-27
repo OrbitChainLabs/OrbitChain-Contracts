@@ -157,13 +157,13 @@ For the full command list, run `orbitchain-cli` with no arguments.
    make build
 
    # Or using cargo directly
-   cargo build -p orbitchain-campaign --target wasm32-unknown-unknown
+   cargo build -p orbitchain-campaign --target wasm32v1-none
    ```
 
 ### Prerequisites
 
 - **Rust stable toolchain** (automatically managed by `rust-toolchain.toml`)
-- **wasm32-unknown-unknown target** (auto-installed by toolchain)
+- **wasm32v1-none target** (auto-installed by toolchain)
 - **Soroban CLI** for contract deployment and testing
 
 ### Toolchain Configuration
@@ -173,7 +173,7 @@ This project uses `rust-toolchain.toml` to ensure consistent development environ
 ```toml
 [toolchain]
 channel = "stable"
-targets = ["wasm32-unknown-unknown"]
+targets = ["wasm32v1-none"]
 components = ["rustfmt", "clippy"]
 ```
 
@@ -211,7 +211,7 @@ make help
 
 ```bash
 # Build the canonical campaign contract for WASM
-cargo build -p orbitchain-campaign --target wasm32-unknown-unknown --release
+cargo build -p orbitchain-campaign --target wasm32v1-none --release
 
 # Build the CLI tools
 cargo build -p orbitchain-tools
