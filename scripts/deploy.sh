@@ -44,7 +44,7 @@ case "$NETWORK" in
 esac
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-WASM_PATH="target/wasm32-unknown-unknown/release/orbitchain_core.wasm"
+WASM_PATH="target/wasm32v1-none/release/orbitchain_core.wasm"
 OPTIMIZED_WASM_PATH="target/wasm32v1-none/release/orbitchain_core.wasm"
 DEPLOYMENTS_DIR="deployments"
 DEPLOYMENT_FILE="${DEPLOYMENTS_DIR}/${NETWORK}.json"
