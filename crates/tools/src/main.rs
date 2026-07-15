@@ -2,9 +2,17 @@
 //!
 //! Parses sub-commands for config, network, vault, asset, signing, response,
 //! keymanager, keypair, deploy, invoke, and account operations.
+//!
+//! Logging (issue #140): every invocation runs inside a `cli_invocation` span
+//! carrying the command and CLI version. The human formatter is the default;
+//! `--log-format=json` switches to a machine-readable formatter so operators
+//! can parse output instead of scraping interleaved stdout. `RUST_LOG` tunes
+//! verbosity (default `info`).
 
-use anyhow::{Result, Context};
+use anyhow::{anyhow, Result, Context};
 use std::env;
+use tracing::{error, info, info_span};
+use tracing_subscriber::EnvFilter;
 
 mod environment_config;
 use environment_config::{EnvironmentConfig, check_testnet_connection};
@@ -30,10 +38,84 @@ use signing_request::{SigningRequest, SigningRequestBuilder, TransactionBuilder}
 mod response_handler;
 use response_handler::{ResponseHandler, SignedTransaction};
 
+/// Output formatter for CLI logs (issue #140).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum LogFormat {
+    /// Default. Readable lines for a person at a terminal.
+    Human,
+    /// One JSON object per event, for log shipping and machine parsing.
+    Json,
+}
+
+impl LogFormat {
+    fn parse(value: &str) -> Result<Self> {
+        match value {
+            "human" => Ok(LogFormat::Human),
+            "json" => Ok(LogFormat::Json),
+            other => Err(anyhow!(
+                "invalid --log-format '{other}' (expected 'human' or 'json')"
+            )),
+        }
+    }
+}
+
+/// Remove `--log-format=<fmt>` / `--log-format <fmt>` from `args` and return the
+/// requested formatter.
+///
+/// The flag is stripped in place because the sub-command dispatcher indexes
+/// `args` positionally (`args[1]`, `args[2..]`); leaving a global flag in the
+/// vector would shift those indices and break every handler. Accepted anywhere
+/// on the line, so `orbitchain-cli config --log-format=json` works.
+fn take_log_format(args: &mut Vec<String>) -> Result<LogFormat> {
+    let mut format = LogFormat::Human;
+    let mut i = 0;
+
+    while i < args.len() {
+        let arg = args[i].clone();
+
+        if let Some(value) = arg.strip_prefix("--log-format=") {
+            format = LogFormat::parse(value)?;
+            args.remove(i);
+            continue;
+        }
+
+        if arg == "--log-format" {
+            let value = args
+                .get(i + 1)
+                .cloned()
+                .ok_or_else(|| anyhow!("--log-format requires a value ('human' or 'json')"))?;
+            format = LogFormat::parse(&value)?;
+            args.remove(i); // flag
+            args.remove(i); // value
+            continue;
+        }
+
+        i += 1;
+    }
+
+    Ok(format)
+}
+
+/// Install the global subscriber. Verbosity comes from `RUST_LOG`, defaulting
+/// to `info` so a normal run is not silent.
+fn init_logging(format: LogFormat) {
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    let builder = tracing_subscriber::fmt().with_env_filter(filter);
+
+    match format {
+        // Diagnostics go to stderr so they never corrupt command stdout that a
+        // caller may be piping.
+        LogFormat::Json => builder.json().with_writer(std::io::stderr).init(),
+        LogFormat::Human => builder.with_writer(std::io::stderr).init(),
+    }
+}
+
 fn main() -> Result<()> {
     dotenv::dotenv().ok();
 
-    let args: Vec<String> = env::args().collect();
+    let mut args: Vec<String> = env::args().collect();
+    let log_format = take_log_format(&mut args)?;
+    init_logging(log_format);
 
     if args.len() < 2 {
         print_cli_banner();
@@ -41,7 +123,33 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    match args[1].as_str() {
+    let command = args[1].clone();
+
+    // One span per invocation, carrying the metadata an operator needs to
+    // correlate a run: which command, how many arguments, which CLI build.
+    let span = info_span!(
+        "cli_invocation",
+        command = %command,
+        arg_count = args.len().saturating_sub(2),
+        version = env!("CARGO_PKG_VERSION"),
+    );
+    let _guard = span.enter();
+    info!("command started");
+
+    let result = dispatch(&command, &args);
+
+    match &result {
+        Ok(()) => info!("command completed"),
+        Err(error) => error!(error = %error, "command failed"),
+    }
+
+    result
+}
+
+/// Route a command to its handler. Split out of `main` so the invocation span
+/// wraps the whole dispatch and its result.
+fn dispatch(command: &str, args: &[String]) -> Result<()> {
+    match command {
         "config" => handle_config(),
         "network" => handle_network(),
         "vault" => handle_vault(),
@@ -55,7 +163,7 @@ fn main() -> Result<()> {
         "signing" => handle_signing(&args[2..]),
         "response" => handle_response(&args[2..]),
         _ => {
-            println!("❌ Unknown command: {}", args[1]);
+            println!("❌ Unknown command: {}", command);
             println!();
             print_available_commands();
             println!("🔗 See docs/deployment.md (Known Limitations) for unimplemented commands.");
@@ -69,7 +177,7 @@ fn main() -> Result<()> {
 /// or after an unknown command is requested.
 fn print_cli_banner() {
     println!("OrbitChain CLI — Soroban Contract Management Tool");
-    println!("Usage: orbitchain-cli <command> [args...]");
+    println!("Usage: orbitchain-cli [--log-format=human|json] <command> [args...]");
 }
 
 /// Print every command currently wired into the dispatcher, grouped by area.
@@ -93,6 +201,11 @@ fn print_available_commands() {
     println!("  deploy                - Stub. Use `stellar contract deploy` or `make deploy-testnet`.");
     println!("  invoke <method>       - Stub. Use `stellar contract invoke` natively.");
     println!("  account               - Stub. Use `keypair generate-master|fund` instead.");
+    println!();
+    println!("Global flags:");
+    println!("  --log-format=<human|json> - Log output format (default: human).");
+    println!("                              JSON emits one object per event for");
+    println!("                              machine parsing. RUST_LOG tunes verbosity.");
     println!();
     println!("Run `orbitchain-cli <command>` (no subcommand) for usage details.");
     println!("Full status of every command mentioned in docs: docs/deployment.md.");
@@ -882,3 +995,64 @@ fn handle_response(args: &[String]) -> Result<()> {
     Ok(())
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn argv(parts: &[&str]) -> Vec<String> {
+        parts.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn test_log_format_defaults_to_human() {
+        let mut args = argv(&["orbitchain-cli", "config"]);
+        assert_eq!(take_log_format(&mut args).unwrap(), LogFormat::Human);
+        // Untouched when the flag is absent.
+        assert_eq!(args, argv(&["orbitchain-cli", "config"]));
+    }
+
+    #[test]
+    fn test_log_format_equals_syntax_is_stripped() {
+        let mut args = argv(&["orbitchain-cli", "--log-format=json", "config"]);
+        assert_eq!(take_log_format(&mut args).unwrap(), LogFormat::Json);
+        // The flag must not survive into the dispatcher's positional indexing.
+        assert_eq!(args, argv(&["orbitchain-cli", "config"]));
+    }
+
+    #[test]
+    fn test_log_format_space_syntax_is_stripped() {
+        let mut args = argv(&["orbitchain-cli", "--log-format", "json", "config"]);
+        assert_eq!(take_log_format(&mut args).unwrap(), LogFormat::Json);
+        assert_eq!(args, argv(&["orbitchain-cli", "config"]));
+    }
+
+    #[test]
+    fn test_log_format_accepted_after_the_subcommand() {
+        // `orbitchain-cli asset issue --log-format=json` must still leave
+        // `asset issue` intact for the handler.
+        let mut args = argv(&["orbitchain-cli", "asset", "issue", "--log-format=json"]);
+        assert_eq!(take_log_format(&mut args).unwrap(), LogFormat::Json);
+        assert_eq!(args, argv(&["orbitchain-cli", "asset", "issue"]));
+    }
+
+    #[test]
+    fn test_explicit_human_is_accepted() {
+        let mut args = argv(&["orbitchain-cli", "--log-format=human", "network"]);
+        assert_eq!(take_log_format(&mut args).unwrap(), LogFormat::Human);
+        assert_eq!(args, argv(&["orbitchain-cli", "network"]));
+    }
+
+    #[test]
+    fn test_invalid_log_format_is_rejected() {
+        let mut args = argv(&["orbitchain-cli", "--log-format=yaml", "config"]);
+        let err = take_log_format(&mut args).unwrap_err().to_string();
+        assert!(err.contains("invalid --log-format"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn test_log_format_without_value_is_rejected() {
+        let mut args = argv(&["orbitchain-cli", "--log-format"]);
+        assert!(take_log_format(&mut args).is_err());
+    }
+}

@@ -24,3 +24,8 @@ sha2 = "0.10"
 ed25519-dalek = "2.2"
 zeroize = "1.6"
 chrono = { version = "0.4", features = ["serde"] }
+# Structured logging (issue #140). `json` gives the machine-readable formatter
+# behind `--log-format=json`; `env-filter` lets operators tune verbosity with
+# RUST_LOG without a rebuild.
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
