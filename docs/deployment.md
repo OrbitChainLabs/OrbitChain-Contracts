@@ -157,7 +157,7 @@ to. Tracker: [issue #37](https://github.com/OrbitChainLabs/OrbitChain-Contracts/
 | `orbitchain-cli signing …` | ✅ Implemented | `handle_signing` (5 sub-commands) | Use as-is |
 | `orbitchain-cli response …` | ✅ Implemented | `handle_response` (5 sub-commands) | Use as-is |
 | `orbitchain-cli deploy` | ⚠️ **Stub** | `handle_deploy` prints an "NOT yet implemented" banner | Use `make deploy-testnet` or `bash scripts/deploy.sh testnet` |
-| `orbitchain-cli invoke <method>` | ⚠️ **Stub** | `handle_invoke` prints an "NOT yet implemented" banner | Use `stellar contract invoke --id $CONTRACT_ID --source <KEY> --network testnet -- <method> [args…]` |
+| `orbitchain-cli invoke` | ✅ Implemented | `invoke::handle` in `crates/tools/src/invoke.rs` (Issue #136) — wraps `stellar contract invoke`, resolving the signing key from `--source-key` / `SOROBAN_ADMIN_SECRET_KEY` / the encrypted vault | Use `orbitchain-cli invoke --id <C…> --method <m> [--args-json '{…}'] [--network <net>] [--send <default\|no\|yes>]` (requires the `stellar` binary, `make setup`) |
 | `orbitchain-cli account` | ⚠️ **Stub** | `handle_account` prints an "NOT yet implemented" banner | Use `orbitchain-cli keypair generate-master` (creation) or `keypair fund` (testnet funding) |
 | `orbitchain-cli account create` | ❌ **Missing** | not in the dispatcher → `Unknown command` | Use `orbitchain-cli keypair generate-master` |
 | `orbitchain-cli account fund` | ❌ **Missing** (under `account` namespace) | Implemented under `keypair fund` | Use `orbitchain-cli keypair fund <account> <amount_xlm>` |

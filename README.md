@@ -235,9 +235,10 @@ cargo test --workspace
 > The commands below match `crates/tools/src/main.rs` and the canonical
 > status table in
 > [`docs/deployment.md`](docs/deployment.md#known-limitations--cli-status).
-> `deploy`, `invoke`, and `account` are currently stubs in the CLI binary;
+> `deploy` and `account` are currently stubs in the CLI binary;
 > use the native `stellar contract …` commands or `make deploy-testnet`
-> instead. `config init`, `contract-id`, `build-donation-tx`, `submit-tx`,
+> instead. `invoke` is fully implemented (see below).
+> `config init`, `contract-id`, `build-donation-tx`, `submit-tx`,
 > `verify-tx`, `prepare-wallet-signing`, and `complete-wallet-signing`
 > shown in older docs are **not implemented** — see issue
 > [#37](https://github.com/OrbitChainLabs/OrbitChain-Contracts/issues/37).
@@ -254,6 +255,18 @@ cargo run -p orbitchain-tools -- asset config
 cargo run -p orbitchain-tools -- asset generate
 cargo run -p orbitchain-tools -- asset trustline GABJ2... USDC
 cargo run -p orbitchain-tools -- asset issue GABJ2... 100
+
+# Invoke a contract method (wraps `stellar contract invoke`; the signing key
+# is resolved from --source-key, SOROBAN_ADMIN_SECRET_KEY, or the encrypted
+# vault — never passed on the child argv)
+cargo run -p orbitchain-tools -- invoke \
+  --id "$(cat .orbitchain_contract_id)" \
+  --method donate \
+  --args-json '{"donor":"G...","campaign_id":1,"amount":"50"}'
+
+# Simulate-only (view functions): add --send no
+cargo run -p orbitchain-tools -- invoke \
+  --id "$(cat .orbitchain_contract_id)" --method version --send no
 
 # Encrypted vault operations
 cargo run -p orbitchain-tools -- keymanager init-vault "$VAULT_MASTER_PASSWORD"
@@ -351,14 +364,18 @@ Expected output:
 
 ### Step 4: Invoke the ping Method
 
-> The in-CLI `invoke` command is also a stub. Use `stellar contract invoke`
-> natively against your deployed contract ID.
-
 ```bash
 # Read the contract ID that Step 3 wrote out
 CONTRACT_ID=$(cat .orbitchain_contract_id)
 
-# Invoke a contract method (replace `version` with any contract method such as `ping`)
+# Invoke a contract method (replace `version` with any contract method such as `ping`).
+# The signing key is resolved from SOROBAN_ADMIN_SECRET_KEY / the encrypted vault.
+cargo run -p orbitchain-tools -- invoke \
+  --id "$CONTRACT_ID" \
+  --method version \
+  --send no
+
+# Or natively:
 stellar contract invoke \
   --id "$CONTRACT_ID" \
   --source test_account \
@@ -413,7 +430,7 @@ stellar contract invoke \
 
 - **"WASM file not found"**: Run `make build-wasm` to build the contracts first.
 - **"Unknown command" or "coming soon"**: You ran an `orbitchain-cli` command
-  that is still a stub (`deploy`, `invoke`, `account`). Run
+  that is still a stub (`deploy`, `account`). Run
   `cargo run -p orbitchain-tools` with no arguments to see which commands are
   actually implemented, and follow
   [`docs/deployment.md`](docs/deployment.md#known-limitations--cli-status).
