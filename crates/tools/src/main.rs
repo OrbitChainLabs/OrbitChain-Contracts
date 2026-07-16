@@ -1,7 +1,9 @@
 //! OrbitChain CLI entry point.
 //!
 //! Parses sub-commands for config, network, vault, asset, signing, response,
-//! keymanager, keypair, deploy, invoke, and account operations.
+//! keymanager, keypair, invoke, deploy, and account operations. `invoke` is
+//! fully implemented (wraps `stellar contract invoke` with vault-backed key
+//! resolution); `deploy` and `account` remain stubs.
 //!
 //! Logging (issue #140): every invocation runs inside a `cli_invocation` span
 //! carrying the command and CLI version. The human formatter is the default;
@@ -37,6 +39,8 @@ use signing_request::{SigningRequest, SigningRequestBuilder, TransactionBuilder}
 
 mod response_handler;
 use response_handler::{ResponseHandler, SignedTransaction};
+
+mod invoke;
 
 /// Output formatter for CLI logs (issue #140).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -156,7 +160,7 @@ fn dispatch(command: &str, args: &[String]) -> Result<()> {
         "toggle" => handle_toggle(&args[2..]),
         "asset" => handle_asset(&args[2..]),
         "deploy" => handle_deploy(),
-        "invoke" => handle_invoke(&args[2..]),
+        "invoke" => invoke::handle(&args[2..]),
         "account" => handle_account(),
         "keymanager" => handle_keymanager(&args[2..]),
         "keypair" => handle_keypair(&args[2..]),
@@ -196,10 +200,11 @@ fn print_available_commands() {
     println!("  keypair <cmd>         - Master/distribution keypair lifecycle");
     println!("  signing <cmd>         - Build donation/campaign/custom signing requests");
     println!("  response <cmd>        - Process/validate/save signed wallet responses");
+    println!("  invoke                - Invoke a contract method (wraps `stellar contract invoke`");
+    println!("                          with vault-backed key resolution)");
     println!();
     println!("Stubs (no-op placeholders, do not rely on in production):");
     println!("  deploy                - Stub. Use `stellar contract deploy` or `make deploy-testnet`.");
-    println!("  invoke <method>       - Stub. Use `stellar contract invoke` natively.");
     println!("  account               - Stub. Use `keypair generate-master|fund` instead.");
     println!();
     println!("Global flags:");
@@ -284,27 +289,6 @@ fn handle_deploy() -> Result<()> {
     println!("         --source \"$SOROBAN_ADMIN_SECRET_KEY\" --network testnet      # native fallback");
     println!("⚠️  Note: the deploy scripts currently ship the legacy `orbitchain-core`");
     println!("    binary even though `orbitchain-campaign` is canonical (see README).");
-    println!("🔗 Tracked in: https://github.com/OrbitChainLabs/OrbitChain-Contracts/issues/37");
-    Ok(())
-}
-
-fn handle_invoke(args: &[String]) -> Result<()> {
-    println!("🔄 The 'invoke' command is a stub and is NOT yet implemented in this binary.");
-    if args.is_empty() {
-        println!("💡 Invoke natively with:");
-        println!("     stellar contract invoke \\");
-        println!("         --id <CONTRACT_ID> \\");
-        println!("         --source <KEY> \\");
-        println!("         --network testnet \\");
-        println!("         -- <method> [args...]");
-    } else {
-        println!("💡 You asked to invoke '{}'. Run it natively for now:", args[0]);
-        println!("     stellar contract invoke \\");
-        println!("         --id <CONTRACT_ID> \\");
-        println!("         --source <KEY> \\");
-        println!("         --network testnet \\");
-        println!("         -- {} [args...]", args[0]);
-    }
     println!("🔗 Tracked in: https://github.com/OrbitChainLabs/OrbitChain-Contracts/issues/37");
     Ok(())
 }
