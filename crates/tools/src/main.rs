@@ -21,6 +21,7 @@ use orbitchain_tools::asset_issuing::{
     check_issuing_readiness, establish_trustline, generate_issuing_keypair, issue_asset,
     AssetConfig, TrustlineConfig,
 };
+use orbitchain_tools::bump_storage::invoke_bump_storage;
 use orbitchain_tools::deploy;
 use orbitchain_tools::encrypted_vault::EncryptedVault;
 use orbitchain_tools::environment_config::EnvironmentConfig;
@@ -156,6 +157,7 @@ fn dispatch(command: &str, args: &[String]) -> Result<()> {
         "keypair" => handle_keypair(&args[2..]),
         "signing" => handle_signing(&args[2..]),
         "response" => handle_response(&args[2..]),
+        "bump-storage" => handle_bump_storage(&args[2..]),
         _ => {
             println!("❌ Unknown command: {}", command);
             println!();
@@ -191,6 +193,7 @@ fn print_available_commands() {
     println!("  signing <cmd>         - Build donation/campaign/custom signing requests");
     println!("  response <cmd>        - Process/validate/save signed wallet responses");
     println!("  deploy [net] [--wasm P] [--force] - Deploy the core contract (Rust mirror of scripts/deploy.sh)");
+    println!("  bump-storage          - Invoke the operator-only bump_storage entrypoint");
     println!();
     println!("Stubs (no-op placeholders, do not rely on in production):");
     println!("  invoke <method>       - Stub. Use `stellar contract invoke` natively.");
@@ -968,6 +971,49 @@ fn handle_response(args: &[String]) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Issue #57 — invoke the operator-only `bump_storage` entrypoint against a
+/// deployed campaign contract, refreshing TTLs to prevent storage archival
+/// on long-running campaigns.
+///
+/// Usage: orbitchain-cli bump-storage --id <CONTRACT_ID> --operator-secret-key <SECRET_KEY> [--network <testnet|mainnet>]
+fn handle_bump_storage(args: &[String]) -> Result<()> {
+    let mut contract_id: Option<String> = None;
+    let mut operator_secret_key: Option<String> = None;
+    let mut network = env::var("SOROBAN_NETWORK").unwrap_or_else(|_| "testnet".to_string());
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--id" => {
+                contract_id = args.get(i + 1).cloned();
+                i += 2;
+            }
+            "--operator-secret-key" => {
+                operator_secret_key = args.get(i + 1).cloned();
+                i += 2;
+            }
+            "--network" => {
+                if let Some(value) = args.get(i + 1) {
+                    network = value.clone();
+                }
+                i += 2;
+            }
+            _ => {
+                i += 1;
+            }
+        }
+    }
+
+    let (Some(contract_id), Some(operator_secret_key)) = (contract_id, operator_secret_key) else {
+        println!(
+            "Usage: orbitchain-cli bump-storage --id <CONTRACT_ID> --operator-secret-key <SECRET_KEY> [--network <testnet|mainnet>]"
+        );
+        return Ok(());
+    };
+
+    invoke_bump_storage(&contract_id, &operator_secret_key, &network)
 }
 
 #[cfg(test)]

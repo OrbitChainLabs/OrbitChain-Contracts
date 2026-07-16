@@ -308,6 +308,11 @@ pub enum DataKey {
     /// unlock burst is one read + one write instead of N of each. Appended at
     /// the end of the enum so existing key encodings are untouched.
     MilestonesVec,
+
+    /// Operator authorization flag, keyed by operator address. Present and
+    /// `true` means the address may call operator-only entrypoints (e.g.
+    /// `bump_storage`). Granted by the creator via `add_operator`.
+    Operators(Address),
 }
 
 // ─── Asset types ──────────────────────────────────────────────────────────────

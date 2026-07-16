@@ -1136,3 +1136,67 @@ fn test_extend_deadline_not_frozen_succeeds() {
         assert_eq!(campaign.end_time, new_end);
     });
 }
+
+// ─── Operator role / bump_storage tests (issue #57) ─────────────────────────
+
+#[test]
+#[should_panic(expected = "Error(Contract, #3)")]
+fn test_bump_storage_fails_without_operator_role() {
+    let env = make_env();
+    env.mock_all_auths();
+    with_contract(&env, || {
+        initialize_default_campaign(&env);
+        let stranger = Address::generate(&env);
+        CampaignContract::bump_storage(env.clone(), stranger);
+    });
+}
+
+#[test]
+#[should_panic]
+fn test_bump_storage_fails_not_initialized() {
+    let env = make_env();
+    env.mock_all_auths();
+    with_contract(&env, || {
+        let operator = Address::generate(&env);
+        CampaignContract::bump_storage(env.clone(), operator);
+    });
+}
+
+#[test]
+fn test_bump_storage_succeeds_for_authorized_operator() {
+    let env = make_env();
+    env.mock_all_auths();
+    with_contract(&env, || {
+        initialize_default_campaign(&env);
+        let operator = Address::generate(&env);
+
+        assert!(!crate::storage::is_operator(&env, &operator));
+
+        CampaignContract::add_operator(env.clone(), operator.clone());
+        assert!(crate::storage::is_operator(&env, &operator));
+
+        // Should not panic: operator is authorized.
+        CampaignContract::bump_storage(env.clone(), operator);
+    });
+}
+
+#[test]
+#[should_panic]
+fn test_add_operator_fails_not_initialized() {
+    let env = make_env();
+    env.mock_all_auths();
+    with_contract(&env, || {
+        let operator = Address::generate(&env);
+        CampaignContract::add_operator(env.clone(), operator);
+    });
+}
+
+#[test]
+#[should_panic(expected = "HostError")]
+fn test_bump_storage_requires_auth() {
+    let env = make_env();
+    with_contract(&env, || {
+        let operator = Address::generate(&env);
+        CampaignContract::bump_storage(env.clone(), operator);
+    });
+}

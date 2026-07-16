@@ -459,6 +459,28 @@ pub fn set_frozen(env: &Env, frozen: bool) {
     bump_persistent(env, &key);
 }
 
+// ─── Operator role (persistent) ───────────────────────────────────────────────
+//
+// Issue #57 – a narrow, explicit allowlist of addresses permitted to call
+// operator-only entrypoints (currently just `bump_storage`). Deliberately not
+// a public function: an "any caller can bump TTL" entrypoint would let anyone
+// force-extend storage rent as a gas/DoS vector.
+
+/// Returns `true` if `operator` has been granted operator status.
+pub fn is_operator(env: &Env, operator: &Address) -> bool {
+    let key = DataKey::Operators(operator.clone());
+    let value: bool = env.storage().persistent().get(&key).unwrap_or(false);
+    bump_persistent(env, &key);
+    value
+}
+
+/// Grant operator status to `operator`. Idempotent.
+pub fn add_operator(env: &Env, operator: &Address) {
+    let key = DataKey::Operators(operator.clone());
+    env.storage().persistent().set(&key, &true);
+    bump_persistent(env, &key);
+}
+
 // ─── Bulk TTL refresh ─────────────────────────────────────────────────────────
 
 /// Refresh TTL for all core persistent keys in a single call.

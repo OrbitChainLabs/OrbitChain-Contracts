@@ -1167,6 +1167,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "soroban-sdk",
+ "stellar-strkey 0.0.16",
  "tokio",
  "toml",
  "tracing",
