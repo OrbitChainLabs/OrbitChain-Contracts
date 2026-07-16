@@ -1,6 +1,9 @@
 # Dependencies
 /target
-/Cargo.lock
+# Cargo.lock is committed: this workspace ships deployable contracts and
+# verifies WASM hashes, both of which require a reproducible dependency graph.
+# It also stops an unbounded upstream range (e.g. soroban-env-host's
+# `ed25519-dalek = ">=2.0.0"`) from silently resolving to a breaking major.
 
 # Environment
 .env
