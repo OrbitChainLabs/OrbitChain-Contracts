@@ -108,3 +108,40 @@ jobs:
           cache-on-failure: true
       - name: cargo check --target wasm32v1-none (contracts)
         run: cargo check ${{ env.CONTRACTS }} --target wasm32v1-none
+
+  mobile-wallet-e2e:
+    name: Mobile wallet deep-link (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install JS dependencies
+        run: npm ci
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium webkit
+      - name: SEP-10 curl smoke test
+        # Closed-loop check: challenge -> sign -> verify against the
+        # reference auth server, independent of the browser tests below.
+        run: |
+          node scripts/sep10-server.mjs &
+          echo $! > /tmp/sep10-server.pid
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:4000/auth?account=GATOACHAPPG72R2KKG5K47ORQVZKGBQ4UYVWLIYITEKMNFXQLNPJFJI3 >/dev/null && break
+            sleep 0.5
+          done
+          bash scripts/smoke-test-sep10.sh
+          kill "$(cat /tmp/sep10-server.pid)"
+      - name: Playwright wallet_connect.html mobile-viewport tests
+        run: npx playwright test
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14
