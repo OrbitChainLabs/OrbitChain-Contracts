@@ -284,7 +284,13 @@ impl ServerSignedTransaction {
                 sig_bytes.len()
             );
         }
-        let signature = Signature::from_bytes(&sig_bytes);
+        // ed25519-dalek 2.x takes a fixed-size array; the length is already
+        // guaranteed by the check above, so this conversion cannot fail.
+        let sig_array: [u8; 64] = sig_bytes
+            .as_slice()
+            .try_into()
+            .context("Ed25519 signature must decode to 64 bytes")?;
+        let signature = Signature::from_bytes(&sig_array);
 
         Ok(verifying_key
             .verify(self.transaction_xdr.as_bytes(), &signature)
@@ -306,9 +312,11 @@ impl SigningRequest {
         }
         crate::key_manager::KeyManager::validate_secret_key(secret_key)?;
 
+        // `strkey_decode` already yields a validated [u8; 32]; in ed25519-dalek
+        // 2.x `SigningKey::from_bytes` is infallible and returns the key
+        // directly (1.x returned a Result, hence the previous `map_err`).
         let seed_bytes = strkey_decode(secret_key, "secret")?;
-        let signing_key = SigningKey::from_bytes(&seed_bytes)
-            .map_err(|e| anyhow!("Invalid Stellar secret seed for Ed25519 keypair: {}", e))?;
+        let signing_key = SigningKey::from_bytes(&seed_bytes);
         let verifying_key = signing_key.verifying_key();
 
         // `SigningKey::sign` (from the `Signer` trait) is RFC 8032
