@@ -371,6 +371,26 @@ pub fn set_frozen(env: &Env, frozen: bool) {
     bump_persistent(env, &key);
 }
 
+// ─── Wrapped native XLM (persistent) ─────────────────────────────────────────
+
+/// Cache the SEP-41 contract address for wrapped native XLM.
+/// Written once during `initialize` when the campaign accepts XLM.
+pub fn set_wrapped_native_xlm(env: &Env, address: &Address) {
+    let key = DataKey::WrappedNativeXlm;
+    env.storage().persistent().set(&key, address);
+    bump_persistent(env, &key);
+}
+
+/// Load the cached wrapped-native-XLM token address.
+/// Returns `None` when the campaign was initialized without an XLM entry.
+#[must_use]
+pub fn get_wrapped_native_xlm(env: &Env) -> Option<Address> {
+    let key = DataKey::WrappedNativeXlm;
+    let value = env.storage().persistent().get(&key)?;
+    bump_persistent(env, &key);
+    Some(value)
+}
+
 // ─── Bulk TTL refresh ─────────────────────────────────────────────────────────
 
 /// Refresh TTL for all core persistent keys in a single call.
@@ -383,6 +403,7 @@ pub fn bump_all_persistent(env: &Env, milestone_count: u32) {
         DataKey::DonationCount,
         DataKey::UniqueDonorCount,
         DataKey::ReleaseCount,
+        DataKey::WrappedNativeXlm,
     ];
 
     for key in &core_keys {
