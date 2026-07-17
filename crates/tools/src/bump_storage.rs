@@ -39,14 +39,17 @@ pub fn invoke_bump_storage(contract_id: &str, operator_secret_key: &str, network
     println!("Operator: {}", operator_public_key);
     println!("Network:  {}", network);
 
+    // The operator secret is passed to the `stellar` child process via the
+    // `STELLAR_ACCOUNT` env var rather than `--source-account <secret>` on
+    // argv — process argv is world-readable via `ps` on shared hosts,
+    // whereas a child process's environment is not.
     let status = Command::new("stellar")
+        .env("STELLAR_ACCOUNT", operator_secret_key)
         .args([
             "contract",
             "invoke",
             "--id",
             contract_id,
-            "--source-account",
-            operator_secret_key,
             "--network",
             network,
             "--",
