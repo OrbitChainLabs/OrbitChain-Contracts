@@ -6,7 +6,7 @@
 ##   make fmt          - Format code
 ##   make clippy       - Lint code
 
-.PHONY: build build-wasm build-tools test fmt lint clean optimize help \
+.PHONY: build build-wasm build-tools test fmt lint clean optimize help e2e \
         setup deploy-testnet deploy-sandbox sandbox-start audit deny
 
 # Default target
@@ -79,6 +79,14 @@ deploy-testnet: build-wasm
 	@echo "🚀 Deploying to testnet..."
 	bash scripts/deploy.sh testnet
 
+# End-to-end sandbox lifecycle test: boots stellar/quickstart in Docker,
+# deploys orbitchain-campaign, and walks init → donate → unlock → release
+# with a real token transfer (issue #116). `bash e2e/run_e2e.sh futurenet`
+# runs the same lifecycle against Futurenet without Docker.
+e2e:
+	@echo "🧪 Running end-to-end sandbox lifecycle test..."
+	bash e2e/run_e2e.sh local
+
 
 # Run cargo-audit for vulnerability scanning
 audit:
@@ -112,5 +120,6 @@ help:
 	@echo "  make sandbox-start  - Start local Stellar sandbox (requires Docker)"
 	@echo "  make deploy-sandbox - Deploy contract to local sandbox"
 	@echo "  make deploy-testnet - Deploy contract to Stellar testnet"
+	@echo "  make e2e            - End-to-end sandbox lifecycle test (Docker)"
 	@echo "  make optimize       - Optimize WASM with wasm-opt -Oz"
 	@echo "  make help           - Show this help message"
