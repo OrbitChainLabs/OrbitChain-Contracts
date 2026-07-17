@@ -1,8 +1,8 @@
 use anyhow::Result;
 use std::env;
 
-use crate::key_manager::KeyManager;
 use crate::encrypted_vault::EncryptedVault;
+use crate::key_manager::KeyManager;
 
 /// Master keypair for the platform
 #[derive(Debug, Clone)]
@@ -63,8 +63,9 @@ impl MasterKeypair {
         println!("🔑 Master Keypair");
         println!("━━━━━━━━━━━━━━━━");
         println!("Public Key: {}", self.public_key);
-        println!("Secret Key: {}...{}", 
-            &self.secret_key[..4], 
+        println!(
+            "Secret Key: {}...{}",
+            &self.secret_key[..4],
             &self.secret_key[self.secret_key.len() - 4..]
         );
         println!("Network: {}", self.network);
@@ -140,8 +141,9 @@ impl DistributionAccount {
         println!("━━━━━━━━━━━━━━━━━━━━━");
         println!("Distribution Public Key: {}", self.public_key);
         println!("Issuing Public Key: {}", self.issuing_public_key);
-        println!("Secret Key: {}...{}", 
-            &self.secret_key[..4], 
+        println!(
+            "Secret Key: {}...{}",
+            &self.secret_key[..4],
             &self.secret_key[self.secret_key.len() - 4..]
         );
         println!("Network: {}", self.network);
@@ -203,7 +205,14 @@ impl AccountFunding {
         println!("Account: {}", self.account_public_key);
         println!("Network: {}", self.network);
         println!("Balance: {} XLM", self.balance);
-        println!("Status: {}", if self.is_funded { "✅ Funded" } else { "⏳ Not Funded" });
+        println!(
+            "Status: {}",
+            if self.is_funded {
+                "✅ Funded"
+            } else {
+                "⏳ Not Funded"
+            }
+        );
     }
 }
 
@@ -214,8 +223,8 @@ mod tests {
     #[test]
     fn test_master_keypair_validate() {
         let keypair = MasterKeypair {
-            public_key: "GBZXVMIRWXL5VZVKXWV2FGKYTQ5VV5VRNJYQVZKYWW3XYVYP3IXGKDU".to_string(),
-            secret_key: "SBZXVMIRWXL5VZVKXWV2FGKYTQ5VV5VRNJYQVZKYWW3XYVYP3IXGKDU".to_string(),
+            public_key: "GAMX62ZD4FWIKMWGVPEDR6WNL2TYTPQMO2ZJEAZUAON7VCZ5G2GWDF7W".to_string(),
+            secret_key: "SAVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCVLG5".to_string(),
             network: "testnet".to_string(),
         };
         assert!(keypair.validate().is_ok());
@@ -224,9 +233,10 @@ mod tests {
     #[test]
     fn test_distribution_account_different_from_issuing() {
         let dist = DistributionAccount {
-            public_key: "GBZXVMIRWXL5VZVKXWV2FGKYTQ5VV5VRNJYQVZKYWW3XYVYP3IXGKDU".to_string(),
-            secret_key: "SBZXVMIRWXL5VZVKXWV2FGKYTQ5VV5VRNJYQVZKYWW3XYVYP3IXGKDU".to_string(),
-            issuing_public_key: "GBZXVMIRWXL5VZVKXWV2FGKYTQ5VV5VRNJYQVZKYWW3XYVYP3IXGKDU".to_string(),
+            public_key: "GAMX62ZD4FWIKMWGVPEDR6WNL2TYTPQMO2ZJEAZUAON7VCZ5G2GWDF7W".to_string(),
+            secret_key: "SAVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCVLG5".to_string(),
+            issuing_public_key: "GAMX62ZD4FWIKMWGVPEDR6WNL2TYTPQMO2ZJEAZUAON7VCZ5G2GWDF7W"
+                .to_string(),
             network: "testnet".to_string(),
         };
         // Should fail because they're the same
@@ -236,8 +246,8 @@ mod tests {
     #[test]
     fn test_account_funding_positive_amount() -> Result<()> {
         let mut funding = AccountFunding::new(
-            "GBZXVMIRWXL5VZVKXWV2FGKYTQ5VV5VRNJYQVZKYWW3XYVYP3IXGKDU",
-            "testnet"
+            "GAMX62ZD4FWIKMWGVPEDR6WNL2TYTPQMO2ZJEAZUAON7VCZ5G2GWDF7W",
+            "testnet",
         )?;
         funding.fund_testnet(100.0)?;
         assert!(funding.is_funded);
@@ -248,8 +258,8 @@ mod tests {
     #[test]
     fn test_account_funding_invalid_amount() -> Result<()> {
         let mut funding = AccountFunding::new(
-            "GBZXVMIRWXL5VZVKXWV2FGKYTQ5VV5VRNJYQVZKYWW3XYVYP3IXGKDU",
-            "testnet"
+            "GAMX62ZD4FWIKMWGVPEDR6WNL2TYTPQMO2ZJEAZUAON7VCZ5G2GWDF7W",
+            "testnet",
         )?;
         let result = funding.fund_testnet(-50.0);
         assert!(result.is_err());
@@ -259,8 +269,8 @@ mod tests {
     #[test]
     fn test_account_funding_mainnet_fails() -> Result<()> {
         let mut funding = AccountFunding::new(
-            "GBZXVMIRWXL5VZVKXWV2FGKYTQ5VV5VRNJYQVZKYWW3XYVYP3IXGKDU",
-            "mainnet"
+            "GAMX62ZD4FWIKMWGVPEDR6WNL2TYTPQMO2ZJEAZUAON7VCZ5G2GWDF7W",
+            "mainnet",
         )?;
         let result = funding.fund_testnet(100.0);
         assert!(result.is_err());

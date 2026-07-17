@@ -20,11 +20,17 @@ use std::env;
 /// `A-Z` followed by `2-7`.
 const CROCKFORD_ALPHABET: &[u8; 32] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
-/// Version byte prefixing Stellar ed25519 public account IDs (`G…`).
-const ED25519_PUBLIC_VERSION_BYTE: u8 = b'G';
+/// Version byte for Stellar ed25519 public account IDs.
+///
+/// This is the *strkey* version byte (`6 << 3`), not the ASCII letter `G`.
+/// It is what makes the base32 encoding begin with `G`; using `b'G'` (0x47)
+/// here instead produces an `I…` string that Stellar wallets — and this
+/// crate's own `KeyManager::validate_public_key` — reject.
+const ED25519_PUBLIC_VERSION_BYTE: u8 = 6 << 3;
 
-/// Version byte prefixing Stellar ed25519 secret seeds (`S…`).
-const ED25519_SEED_VERSION_BYTE: u8 = b'S';
+/// Version byte for Stellar ed25519 secret seeds (`18 << 3`), which makes the
+/// encoding begin with `S`. See the note above; `b'S'` (0x53) is wrong.
+const ED25519_SEED_VERSION_BYTE: u8 = 18 << 3;
 
 /// Decoded strkey length in bytes: 1 version byte + 32 key bytes + 2 CRC16 bytes.
 const STRKEY_DECODED_LEN: usize = 35;
@@ -284,7 +290,13 @@ impl ServerSignedTransaction {
                 sig_bytes.len()
             );
         }
-        let signature = Signature::from_bytes(&sig_bytes);
+        // ed25519-dalek 2.x takes a fixed-size array; the length is already
+        // guaranteed by the check above, so this conversion cannot fail.
+        let sig_array: [u8; 64] = sig_bytes
+            .as_slice()
+            .try_into()
+            .context("Ed25519 signature must decode to 64 bytes")?;
+        let signature = Signature::from_bytes(&sig_array);
 
         Ok(verifying_key
             .verify(self.transaction_xdr.as_bytes(), &signature)
@@ -306,9 +318,11 @@ impl SigningRequest {
         }
         crate::key_manager::KeyManager::validate_secret_key(secret_key)?;
 
+        // `strkey_decode` already yields a validated [u8; 32]; in ed25519-dalek
+        // 2.x `SigningKey::from_bytes` is infallible and returns the key
+        // directly (1.x returned a Result, hence the previous `map_err`).
         let seed_bytes = strkey_decode(secret_key, "secret")?;
-        let signing_key = SigningKey::from_bytes(&seed_bytes)
-            .map_err(|e| anyhow!("Invalid Stellar secret seed for Ed25519 keypair: {}", e))?;
+        let signing_key = SigningKey::from_bytes(&seed_bytes);
         let verifying_key = signing_key.verifying_key();
 
         // `SigningKey::sign` (from the `Signer` trait) is RFC 8032
@@ -453,9 +467,9 @@ mod tests {
     /// Public key is the canonical Ed25519 point derived from the seed;
     /// signing and verifying should never produce a different public key.
     const FIXTURE_SECRET: &str =
-        "SBZXVMIRWXL5VZVKXWV2FGKYTQ5VV5VRNJYQVZKYWW3XYVYP3IXGKDU";
+        "SAVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCVLG5";
     const FIXTURE_PUBLIC: &str =
-        "GBZXVMIRWXL5VZVKXWV2FGKYTQ5VV5VRNJYQVZKYWW3XYVYP3IXGKDU";
+        "GAMX62ZD4FWIKMWGVPEDR6WNL2TYTPQMO2ZJEAZUAON7VCZ5G2GWDF7W";
 
     fn fixture_request() -> SigningRequest {
         SigningRequest {
@@ -587,7 +601,7 @@ mod tests {
         // Sign with one secret, then swap in an unrelated public key.
         let mut signed = req.sign_server_side(FIXTURE_SECRET).unwrap();
         signed.signer_public_key =
-            "GCNVD4NI7K2SVQHCB4QKV3WMZ5XS3DMMVJCTPCBU3HJZRJQZTIPMXBNP".to_string();
+            "GCT7NX5PR44LRG5IZZSJWWKPSHSNAH64K744SSJ56Q5V4UFJTBZWOOJ6".to_string();
         assert!(!signed.verify().unwrap());
     }
 
@@ -622,7 +636,7 @@ mod tests {
         let req = fixture_request();
         let sig1 = req.sign_server_side(FIXTURE_SECRET).unwrap().signature;
         let sig2 = req
-            .sign_server_side("SCZANGBA5QDPSBM5QOTSXSI7JKEFYABMUQRPTGMWNJKFA5ENDNSQSTE")
+            .sign_server_side("SBRWGY3DMNRWGY3DMNRWGY3DMNRWGY3DMNRWGY3DMNRWGY3DMNRWGK3F")
             .unwrap()
             .signature;
         assert_ne!(sig1, sig2);
@@ -682,3 +696,6 @@ mod tests {
         assert!(parsed.verify().is_err());
     }
 }
+
+
+

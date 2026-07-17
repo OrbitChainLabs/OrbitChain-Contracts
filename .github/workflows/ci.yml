@@ -19,14 +19,16 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: short
-  # Workspace members that compile to wasm32 Soroban contracts. crates/tools
-  # is intentionally excluded — it is a native CLI binary, not a contract, and
-  # has its own dev-tooling lint/test debt tracked separately.
+  # Workspace members that compile to wasm32 Soroban contracts.
   CONTRACTS: >-
     -p orbitchain-campaign
     -p orbitchain-common
     -p orbitchain-core
     -p orbitchain-token-bridge
+  # The native CLI crate. Covered by the tool-* jobs below (issue #122). It is
+  # a host binary, not a contract, so it is built for the host target only and
+  # kept in its own package scope rather than folded into CONTRACTS.
+  TOOLS: -p orbitchain-tools
 
 jobs:
   fmt:
@@ -145,3 +147,84 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 14
+
+  # ── crates/tools (native CLI) — issue #122 ─────────────────────────────────
+  # The CLI is a major part of the user-facing surface and was previously
+  # unbuilt/untested in CI. These jobs mirror the contract jobs above, scoped to
+  # $TOOLS. `tool-check` and `tool-test` are required gates — the acceptance
+  # criterion is that a PR breaking `cargo test -p orbitchain-tools` cannot
+  # merge. `tool-fmt` and `tool-clippy` run but are non-blocking for now: the
+  # crate carries pre-existing rustfmt drift and clippy debt (a deprecated
+  # aes-gcm API, redundant #[must_use]s) that is out of scope for restoring
+  # coverage. Drop `continue-on-error` once that debt is cleared — mirrors the
+  # gradual-enforcement pattern already used elsewhere.
+  tool-fmt:
+    name: Tool Format check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          cache: false
+      - name: Cache cargo registry and target
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - name: cargo fmt --check (tools)
+        run: cargo fmt ${{ env.TOOLS }} -- --check
+
+  tool-clippy:
+    name: Tool Clippy lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          cache: false
+      - name: Cache cargo registry and target
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - name: cargo clippy (tools)
+        run: cargo clippy ${{ env.TOOLS }} --all-targets -- -D warnings
+
+  tool-check:
+    name: Tool compile check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          cache: false
+      - name: Cache cargo registry and target
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - name: cargo check (tools)
+        run: cargo check ${{ env.TOOLS }} --all-targets
+
+  tool-test:
+    name: Tool tests (host target)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          cache: false
+      - name: Cache cargo registry and target
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      # Acceptance criterion (#122): a PR that fails this blocks merge.
+      - name: cargo test (tools)
+        run: cargo test ${{ env.TOOLS }}
