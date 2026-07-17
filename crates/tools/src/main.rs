@@ -17,6 +17,7 @@ use tracing_subscriber::EnvFilter;
 // The binary consumes the library crate instead of re-declaring each module
 // with `mod` — the duplicate-module pattern compiled every file twice and
 // flagged every helper the CLI doesn't call as dead code in the bin target.
+use orbitchain_tools::deploy;
 use orbitchain_tools::asset_issuing::{
     check_issuing_readiness, establish_trustline, generate_issuing_keypair, issue_asset,
     AssetConfig, TrustlineConfig,
@@ -103,6 +104,8 @@ fn init_logging(format: LogFormat) {
     }
 }
 
+mod deploy;
+
 fn main() -> Result<()> {
     dotenv::dotenv().ok();
 
@@ -148,7 +151,7 @@ fn dispatch(command: &str, args: &[String]) -> Result<()> {
         "vault" => handle_vault(),
         "toggle" => handle_toggle(&args[2..]),
         "asset" => handle_asset(&args[2..]),
-        "deploy" => handle_deploy(),
+        "deploy" => handle_deploy(&args[2..]),
         "invoke" => handle_invoke(&args[2..]),
         "account" => handle_account(),
         "keymanager" => handle_keymanager(&args[2..]),
@@ -189,11 +192,9 @@ fn print_available_commands() {
     println!("  keypair <cmd>         - Master/distribution keypair lifecycle");
     println!("  signing <cmd>         - Build donation/campaign/custom signing requests");
     println!("  response <cmd>        - Process/validate/save signed wallet responses");
+    println!("  deploy [net] [--wasm P] [--force] - Deploy the core contract (Rust mirror of scripts/deploy.sh)");
     println!();
     println!("Stubs (no-op placeholders, do not rely on in production):");
-    println!(
-        "  deploy                - Stub. Use `stellar contract deploy` or `make deploy-testnet`."
-    );
     println!("  invoke <method>       - Stub. Use `stellar contract invoke` natively.");
     println!("  account               - Stub. Use `keypair generate-master|fund` instead.");
     println!();
@@ -267,22 +268,8 @@ fn handle_network() -> Result<()> {
     Ok(())
 }
 
-fn handle_deploy() -> Result<()> {
-    println!("🚀 The 'deploy' command is a stub and is NOT yet implemented in this binary.");
-    println!("💡 For real deployments use one of:");
-    println!("     make deploy-testnet                  # uses scripts/deploy.sh + stellar contract deploy");
-    println!("     bash scripts/deploy.sh testnet       # ditto, direct script invocation");
-    println!("        (loads $SOROBAN_ADMIN_SECRET_KEY from .env, deploys the WASM at");
-    println!("         target/wasm32v1-none/release/orbitchain_core.wasm to testnet)");
-    println!("     stellar contract deploy \\");
-    println!("         --wasm target/wasm32v1-none/release/orbitchain_core.wasm \\");
-    println!(
-        "         --source \"$SOROBAN_ADMIN_SECRET_KEY\" --network testnet      # native fallback"
-    );
-    println!("⚠️  Note: the deploy scripts currently ship the legacy `orbitchain-core`");
-    println!("    binary even though `orbitchain-campaign` is canonical (see README).");
-    println!("🔗 Tracked in: https://github.com/OrbitChainLabs/OrbitChain-Contracts/issues/37");
-    Ok(())
+fn handle_deploy(args: &[String]) -> Result<()> {
+    deploy::run(args)
 }
 
 fn handle_invoke(args: &[String]) -> Result<()> {
