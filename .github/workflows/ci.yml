@@ -72,9 +72,17 @@ jobs:
         run: cargo clippy ${{ env.CONTRACTS }} -- -D warnings
 
   test:
-    name: Tests (host target)
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # Multi-OS matrix (issue #123): host-target tests are the one place OS
+    # differences can bite (path handling, linkers, libc); fmt/clippy are
+    # style checks and wasm-check cross-compiles to the same wasm32 target
+    # from any host, so those stay on ubuntu only.
+    name: Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust toolchain
