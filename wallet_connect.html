@@ -118,6 +118,12 @@
     #status { margin-top: .75rem; font-size: .9rem; color: var(--muted); min-height: 1.2em; }
     #status.is-error { color: var(--error); font-weight: 600; }
 
+    /* Desktop multi-wallet chooser (issue #142) — inline in the card, NOT the
+       modal picker: the overlay dialog is reserved for the mobile deep-link
+       flow, and desktop UAs must never see it. */
+    #desktop-wallets { margin-top: 1.25rem; display: none; text-align: left; }
+    #desktop-wallets .chooser-title { font-size: .9rem; font-weight: 600; color: var(--heading); margin: 0 0 .5rem; }
+
     /* Mobile wallet picker (modal dialog) */
     #wallet-picker-overlay { display: none; position: fixed; inset: 0; background: var(--overlay); align-items: center; justify-content: center; padding: 1rem; z-index: 10; }
     #wallet-picker-overlay.open { display: flex; }
@@ -143,6 +149,15 @@
       <p class="connected-flag"><span class="dot" aria-hidden="true"></span><strong>Wallet Connected</strong></p>
       <p id="address-label">Address:</p>
       <div id="wallet-address" role="note" aria-labelledby="address-label"></div>
+    </div>
+
+    <!-- Desktop multi-wallet chooser (issue #142): shown when more than one
+         wallet extension is detected. A single detected wallet connects
+         directly; none falls through to the manual form below. -->
+    <div id="desktop-wallets" role="group" aria-labelledby="desktop-wallets-title">
+      <p class="chooser-title" id="desktop-wallets-title">Choose a wallet</p>
+      <div id="desktop-wallet-options"></div>
+      <button type="button" class="secondary" id="desktop-wallets-cancel">Cancel</button>
     </div>
 
     <!-- Desktop fallback: accessible inline form instead of window.prompt(),
@@ -237,15 +252,16 @@
           return;
         }
 
-        // Freighter wallet API (https://docs.freighter.app)
-        // Check for Freighter wallet extension
-        if (typeof window.freighter !== 'undefined') {
-          const connected = await window.freighter.isConnected();
-          if (!connected) await window.freighter.connect();
-          const { address } = await window.freighter.getAddress();
+        // Desktop: consult the wallet registry (issue #142). Exactly one
+        // detected extension keeps the historical UX and connects directly;
+        // several show the inline chooser; none falls back to manual entry.
+        const detected = OrbitWalletConnect.detectedDesktopWallets();
+        if (detected.length === 1) {
+          const address = await detected[0].connect();
           showConnected(address);
+        } else if (detected.length > 1) {
+          openDesktopChooser(detected);
         } else {
-          // Fallback: accessible manual entry (dev/demo mode)
           openManualForm();
         }
       } catch (err) {
@@ -258,6 +274,50 @@
       btn.disabled = false;
       btn.removeAttribute('aria-busy');
     }
+
+    // ── Desktop multi-wallet chooser (issue #142) ─────────────────────────
+    const desktopWallets = document.getElementById('desktop-wallets');
+    const desktopWalletOptions = document.getElementById('desktop-wallet-options');
+    const desktopWalletsCancel = document.getElementById('desktop-wallets-cancel');
+
+    function openDesktopChooser(wallets) {
+      desktopWalletOptions.innerHTML = '';
+      wallets.forEach((wallet) => {
+        const el = document.createElement('button');
+        el.type = 'button';
+        el.className = 'wallet-option';
+        el.innerHTML = `<span class="icon" aria-hidden="true">${wallet.icon}</span><span>${wallet.name}</span>`;
+        el.onclick = () => connectDesktopWallet(wallet);
+        desktopWalletOptions.appendChild(el);
+      });
+      desktopWallets.style.display = 'block';
+      btn.removeAttribute('aria-busy');
+      setStatus('Several wallet extensions detected. Choose one to connect.');
+      const firstOption = desktopWalletOptions.querySelector('button');
+      if (firstOption) firstOption.focus();
+    }
+
+    function closeDesktopChooser(refocus) {
+      desktopWallets.style.display = 'none';
+      desktopWalletOptions.innerHTML = '';
+      resetConnectButton();
+      if (refocus) btn.focus();
+    }
+
+    async function connectDesktopWallet(wallet) {
+      try {
+        setStatus('Connecting with ' + wallet.name + '…');
+        const address = await wallet.connect();
+        showConnected(address);
+      } catch (err) {
+        setError(err.message);
+      }
+    }
+
+    desktopWalletsCancel.addEventListener('click', () => {
+      closeDesktopChooser(true);
+      setStatus('Connection cancelled.');
+    });
 
     // ── Desktop manual-entry fallback ─────────────────────────────────────
     function openManualForm() {
@@ -374,6 +434,7 @@
 
     function showConnected(address) {
       closeWalletPicker(false);
+      closeDesktopChooser(false);
       closeManualForm();
       walletAddress.textContent = address;
       walletInfo.style.display = 'block';
