@@ -1,6 +1,5 @@
 # Dependencies
 /target
-/Cargo.lock
 
 # Environment
 .env
