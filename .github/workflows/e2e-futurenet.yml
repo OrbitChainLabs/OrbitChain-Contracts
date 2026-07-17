@@ -1,0 +1,56 @@
+name: E2E (Futurenet)
+
+# End-to-end lifecycle canary against Soroban Futurenet (issue #124).
+#
+# Runs the same harness as `make e2e` (e2e/run_e2e.sh, issue #116) but
+# against the live Futurenet network instead of a local Docker sandbox:
+# init → donate → milestone unlock → release, with a real token transfer.
+#
+# Deliberately NOT a pull_request gate: a live public network can be slow,
+# rate-limited, or down for reasons unrelated to any code change, and a
+# canary that blocks merges on third-party weather trains people to ignore
+# CI. It runs on a daily schedule and on demand; failures notify via the
+# Actions UI without blocking anyone's PR.
+
+permissions:
+  contents: read
+
+on:
+  schedule:
+    # Daily, 06:17 UTC — off the top of the hour to dodge scheduler load spikes.
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+concurrency:
+  # Never run two canaries at once — they share friendbot rate limits.
+  group: e2e-futurenet
+  cancel-in-progress: false
+
+jobs:
+  e2e-futurenet:
+    name: Lifecycle against Futurenet
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain with wasm target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          # Same target rationale as ci.yml's wasm-check job.
+          targets: wasm32v1-none
+          cache: false
+
+      - name: Cache cargo registry and target
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Install cargo-binstall
+        uses: cargo-bins/cargo-binstall@main
+
+      - name: Install stellar CLI (prebuilt binary)
+        run: cargo binstall -y stellar-cli
+
+      - name: Run the e2e lifecycle against Futurenet
+        run: bash e2e/run_e2e.sh futurenet
