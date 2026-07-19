@@ -12,7 +12,7 @@ use anyhow::{Context, Result};
 use std::env;
 use std::fs;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct SecureVault {
     pub admin_secret_key: Option<String>,
     pub admin_public_key: Option<String>,
@@ -33,8 +33,7 @@ impl SecureVault {
         }
     }
 
-        /// Validate that required keys are present for mainnet operations.
-    #[must_use]
+    /// Validate that required keys are present for mainnet operations.
     pub fn validate_for_mainnet(&self) -> Result<()> {
         if self.admin_secret_key.is_none() {
             anyhow::bail!("SOROBAN_ADMIN_SECRET_KEY is required for mainnet operations");
@@ -56,7 +55,6 @@ impl SecureVault {
     }
 
     /// Validate keys for testnet (permissive — allows empty/unset keys).
-    #[must_use]
     pub fn validate_for_testnet(&self) -> Result<()> {
         if let Some(secret) = &self.admin_secret_key {
             if !secret.is_empty() && !secret.starts_with('S') {
@@ -153,17 +151,6 @@ impl SecureVault {
     }
 }
 
-impl Default for SecureVault {
-    fn default() -> Self {
-        Self {
-            admin_secret_key: None,
-            admin_public_key: None,
-            issuing_secret_key: None,
-            issuing_public_key: None,
-        }
-    }
-}
-
 /// Check mainnet configuration readiness
 pub fn check_mainnet_readiness() -> Result<()> {
     let vault = SecureVault::from_env();
@@ -220,10 +207,18 @@ mod tests {
     fn test_vault_from_env() {
         let vault = SecureVault::from_env();
         if let Some(secret) = &vault.admin_secret_key {
-            assert!(secret.is_empty() || secret.starts_with('S'), "admin secret key must start with 'S' (got {:?})", secret);
+            assert!(
+                secret.is_empty() || secret.starts_with('S'),
+                "admin secret key must start with 'S' (got {:?})",
+                secret
+            );
         }
         if let Some(public) = &vault.admin_public_key {
-            assert!(public.is_empty() || public.starts_with('G'), "admin public key must start with 'G' (got {:?})", public);
+            assert!(
+                public.is_empty() || public.starts_with('G'),
+                "admin public key must start with 'G' (got {:?})",
+                public
+            );
         }
     }
 
@@ -243,17 +238,21 @@ mod tests {
     // Negative test for testnet validation.
     #[test]
     fn test_validate_for_testnet_rejects_bad_secret() {
-        let mut vault = SecureVault::default();
-        vault.admin_secret_key = Some("invalid_secret".to_string());
+        let vault = SecureVault {
+            admin_secret_key: Some("invalid_secret".to_string()),
+            ..SecureVault::default()
+        };
         assert!(vault.validate_for_testnet().is_err());
     }
 
     // Positive test for mainnet validation.
     #[test]
     fn test_validate_for_mainnet_positive() {
-        let mut vault = SecureVault::default();
-        vault.admin_secret_key = Some("SSECRET".to_string());
-        vault.admin_public_key = Some("GPUBLIC".to_string());
+        let vault = SecureVault {
+            admin_secret_key: Some("SSECRET".to_string()),
+            admin_public_key: Some("GPUBLIC".to_string()),
+            ..SecureVault::default()
+        };
         assert!(vault.validate_for_mainnet().is_ok());
     }
 

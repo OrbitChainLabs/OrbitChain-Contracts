@@ -14,7 +14,6 @@ pub struct MasterKeypair {
 
 impl MasterKeypair {
     /// Generate a new master keypair
-    #[must_use]
     pub fn generate(network: &str) -> Result<Self> {
         // In production, this would use Stellar SDK to generate keypair
         // For now, validate that the network is valid
@@ -37,7 +36,6 @@ impl MasterKeypair {
     }
 
     /// Store master keypair in encrypted vault.
-    #[must_use]
     pub fn store_in_vault(&self, vault: &mut EncryptedVault) -> Result<()> {
         vault.store_secret_key("master_secret_key", &self.secret_key)?;
         vault.store_public_key("master_public_key", &self.public_key)?;
@@ -45,7 +43,6 @@ impl MasterKeypair {
     }
 
     /// Load master keypair from vault.
-    #[must_use]
     pub fn load_from_vault(vault: &EncryptedVault) -> Result<Self> {
         let public_key = vault.retrieve_public_key("master_public_key")?;
         let secret_key = vault.retrieve_secret_key("master_secret_key")?;
@@ -83,7 +80,6 @@ pub struct DistributionAccount {
 
 impl DistributionAccount {
     /// Generate a new distribution account.
-    #[must_use]
     pub fn generate(network: &str, issuing_public_key: &str) -> Result<Self> {
         // In production, this would use Stellar SDK to generate keypair
         KeyManager::validate_public_key(issuing_public_key)?;
@@ -97,7 +93,6 @@ impl DistributionAccount {
     }
 
     /// Store distribution account in vault.
-    #[must_use]
     pub fn store_in_vault(&self, vault: &mut EncryptedVault) -> Result<()> {
         vault.store_secret_key("distribution_secret_key", &self.secret_key)?;
         vault.store_public_key("distribution_public_key", &self.public_key)?;
@@ -106,7 +101,6 @@ impl DistributionAccount {
     }
 
     /// Load distribution account from vault.
-    #[must_use]
     pub fn load_from_vault(vault: &EncryptedVault) -> Result<Self> {
         let public_key = vault.retrieve_public_key("distribution_public_key")?;
         let secret_key = vault.retrieve_secret_key("distribution_secret_key")?;
@@ -122,7 +116,6 @@ impl DistributionAccount {
     }
 
     /// Validate distribution account setup (must differ from issuing).
-    #[must_use]
     pub fn validate(&self) -> Result<()> {
         KeyManager::validate_public_key(&self.public_key)?;
         KeyManager::validate_public_key(&self.issuing_public_key)?;
@@ -161,7 +154,6 @@ pub struct AccountFunding {
 
 impl AccountFunding {
     /// Create funding status checker.
-    #[must_use]
     pub fn new(account_public_key: &str, network: &str) -> Result<Self> {
         KeyManager::validate_public_key(account_public_key)?;
 

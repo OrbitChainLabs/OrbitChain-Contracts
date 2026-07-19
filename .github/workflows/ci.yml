@@ -150,19 +150,14 @@ jobs:
 
   # ── crates/tools (native CLI) — issue #122 ─────────────────────────────────
   # The CLI is a major part of the user-facing surface and was previously
-  # unbuilt/untested in CI. These jobs mirror the contract jobs above, scoped to
-  # $TOOLS. `tool-check` and `tool-test` are required gates — the acceptance
-  # criterion is that a PR breaking `cargo test -p orbitchain-tools` cannot
-  # merge. `tool-fmt` and `tool-clippy` run but are non-blocking for now: the
-  # crate carries pre-existing rustfmt drift and clippy debt (a deprecated
-  # aes-gcm API, redundant #[must_use]s) that is out of scope for restoring
-  # coverage. Drop `continue-on-error` once that debt is cleared — mirrors the
-  # gradual-enforcement pattern already used elsewhere.
+  # unbuilt/untested in CI. These four jobs mirror the contract jobs above,
+  # scoped to $TOOLS, and all block merge: the crate's accumulated fmt and
+  # clippy drift was cleared when coverage was restored, so there is no
+  # grace period to manage.
   tool-fmt:
     name: Tool Format check
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust toolchain
@@ -180,7 +175,6 @@ jobs:
     name: Tool Clippy lint
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust toolchain

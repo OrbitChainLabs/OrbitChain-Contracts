@@ -48,7 +48,6 @@ pub struct ResponseHandler;
 
 impl ResponseHandler {
     /// Parse signed transaction from JSON response.
-    #[must_use]
     pub fn parse_response(response_json: &str) -> Result<SignedTransaction> {
         let parsed: serde_json::Value =
             serde_json::from_str(response_json).context("Failed to parse response JSON")?;
@@ -71,7 +70,6 @@ impl ResponseHandler {
     }
 
     /// Validate a signed transaction.
-    #[must_use]
     pub fn validate(tx: &SignedTransaction) -> Result<()> {
         if tx.request_id.is_empty() {
             return Err(anyhow!("Request ID cannot be empty"));
@@ -89,7 +87,6 @@ impl ResponseHandler {
     }
 
     /// Save signed transaction to file.
-    #[must_use]
     pub fn save_to_file(tx: &SignedTransaction, path: &str) -> Result<()> {
         let json = serde_json::to_string_pretty(tx).context("Failed to serialize transaction")?;
 
@@ -99,7 +96,6 @@ impl ResponseHandler {
     }
 
     /// Load signed transaction from file.
-    #[must_use]
     pub fn load_from_file(path: &str) -> Result<SignedTransaction> {
         let content = fs::read_to_string(path)
             .context(format!("Failed to read transaction from {}", path))?;

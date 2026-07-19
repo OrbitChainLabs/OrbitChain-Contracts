@@ -188,9 +188,7 @@ impl WithdrawalAuditLog {
             ledger_timestamp,
             tx_hash,
         });
-        self.entries
-            .last()
-            .expect("entry was just pushed")
+        self.entries.last().expect("entry was just pushed")
     }
 
     /// All entries currently held in memory.
@@ -255,8 +253,7 @@ impl WithdrawalAuditLog {
                 .context("Failed to read audit log metadata")?
                 .permissions();
             perms.set_mode(0o600);
-            std::fs::set_permissions(path, perms)
-                .context("Failed to set audit log permissions")?;
+            std::fs::set_permissions(path, perms).context("Failed to set audit log permissions")?;
         }
 
         file.write_all(buf.as_bytes())
@@ -351,8 +348,24 @@ mod tests {
         let _ = std::fs::remove_file(&path);
 
         let mut log = sample_log();
-        log.log(WithdrawalAction::Requested, 1, "GA", 500, "GADMIN", None, None);
-        log.log(WithdrawalAction::Approved, 1, "GA", 500, "GADMIN", Some(99), None);
+        log.log(
+            WithdrawalAction::Requested,
+            1,
+            "GA",
+            500,
+            "GADMIN",
+            None,
+            None,
+        );
+        log.log(
+            WithdrawalAction::Approved,
+            1,
+            "GA",
+            500,
+            "GADMIN",
+            Some(99),
+            None,
+        );
         log.flush_to_disk(&path)?;
 
         let content = std::fs::read_to_string(&path)?;
@@ -378,7 +391,15 @@ mod tests {
         let _ = std::fs::remove_file(&path);
 
         let mut log = sample_log();
-        log.log(WithdrawalAction::Requested, 1, "GA", 1, "GADMIN", None, None);
+        log.log(
+            WithdrawalAction::Requested,
+            1,
+            "GA",
+            1,
+            "GADMIN",
+            None,
+            None,
+        );
         log.flush_to_disk(&path)?;
 
         let mode = std::fs::metadata(&path)?.permissions().mode();
@@ -394,7 +415,15 @@ mod tests {
         let _ = std::fs::remove_file(&path);
 
         let mut log = sample_log();
-        log.log(WithdrawalAction::Requested, 1, "GA", 1, "GADMIN", None, None);
+        log.log(
+            WithdrawalAction::Requested,
+            1,
+            "GA",
+            1,
+            "GADMIN",
+            None,
+            None,
+        );
         log.flush_to_disk(&path)?;
         // A flush with no new entries is a no-op.
         log.flush_to_disk(&path)?;
@@ -419,8 +448,24 @@ mod tests {
         // Process 1: log two events and flush.
         {
             let mut log = sample_log();
-            log.log(WithdrawalAction::Requested, 5, "GA", 100, "GADMIN", None, None);
-            log.log(WithdrawalAction::Approved, 5, "GA", 100, "GADMIN", Some(7), None);
+            log.log(
+                WithdrawalAction::Requested,
+                5,
+                "GA",
+                100,
+                "GADMIN",
+                None,
+                None,
+            );
+            log.log(
+                WithdrawalAction::Approved,
+                5,
+                "GA",
+                100,
+                "GADMIN",
+                Some(7),
+                None,
+            );
             log.flush_to_disk(&path)?;
         } // "crash": process 1 drops everything in memory.
 
@@ -431,7 +476,15 @@ mod tests {
             assert_eq!(log.len(), 2, "history must be reloaded, not lost");
             assert_eq!(log.pending_flush(), 0, "loaded entries are already on disk");
 
-            log.log(WithdrawalAction::Submitted, 5, "GA", 100, "GADMIN", Some(8), Some("deadbeef".into()));
+            log.log(
+                WithdrawalAction::Submitted,
+                5,
+                "GA",
+                100,
+                "GADMIN",
+                Some(8),
+                Some("deadbeef".into()),
+            );
             log.flush_to_disk(&path)?;
         }
 

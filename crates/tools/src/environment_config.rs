@@ -79,7 +79,6 @@ impl EnvironmentConfig {
         })
     }
 
-    #[must_use]
     pub fn get_active_network(&self) -> Result<NetworkConfig> {
         match self.network.as_str() {
             "testnet" => Ok(self.testnet.clone()),
@@ -108,8 +107,7 @@ impl EnvironmentConfig {
     }
 
     pub fn save_to_file(&self, path: &str) -> Result<()> {
-        let content = toml::to_string_pretty(self)
-            .context("Failed to serialize config")?;
+        let content = toml::to_string_pretty(self).context("Failed to serialize config")?;
         fs::write(path, content).context("Failed to write config file")?;
         Ok(())
     }
@@ -136,7 +134,9 @@ pub fn check_testnet_connection() -> Result<()> {
     println!("✅ Testnet configuration is valid");
     println!("💡 To test connection, ensure you have:");
     println!("   1. Installed Soroban CLI: cargo install soroban-cli");
-    println!("   2. Generated a testnet keypair: soroban keys generate test_account --network testnet");
+    println!(
+        "   2. Generated a testnet keypair: soroban keys generate test_account --network testnet"
+    );
     println!("   3. Funded account from: https://laboratory.stellar.org/#account-creator?network=testnet");
 
     Ok(())

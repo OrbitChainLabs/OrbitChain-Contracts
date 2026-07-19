@@ -4,7 +4,6 @@
 //! signing response, processing and validating the result, and persisting/loading.
 
 use std::fs;
-use std::path::Path;
 
 #[test]
 fn test_signing_and_response_integration() {

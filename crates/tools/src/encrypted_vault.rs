@@ -34,7 +34,6 @@ impl EncryptedVault {
     }
 
     /// Initialize vault with a master password
-    #[must_use]
     pub fn with_password(password: &str) -> Result<Self> {
         let key_manager = KeyManager::from_password(password)?;
         Ok(Self {
@@ -45,7 +44,6 @@ impl EncryptedVault {
     }
 
     /// Initialize vault with a hex-encoded master key
-    #[must_use]
     pub fn with_hex_key(hex_key: &str) -> Result<Self> {
         let key_manager = KeyManager::from_hex_key(hex_key)?;
         Ok(Self {
@@ -56,7 +54,6 @@ impl EncryptedVault {
     }
 
     /// Load vault configuration from .env file
-    #[must_use]
     pub fn from_env() -> Result<Self> {
         dotenv::dotenv().ok();
 
@@ -99,7 +96,6 @@ impl EncryptedVault {
     }
 
     /// Store an encrypted secret key in the vault.
-    #[must_use]
     pub fn store_secret_key(&mut self, key_name: &str, secret_key: &str) -> Result<()> {
         // Validate key format
         KeyManager::validate_secret_key(secret_key)?;
@@ -119,7 +115,6 @@ impl EncryptedVault {
     }
 
     /// Retrieve and decrypt a secret key from the vault.
-    #[must_use]
     pub fn retrieve_secret_key(&self, key_name: &str) -> Result<String> {
         // Get encrypted key
         let encrypted_hex = self
@@ -139,7 +134,6 @@ impl EncryptedVault {
     }
 
     /// Store a public key (unencrypted).
-    #[must_use]
     pub fn store_public_key(&mut self, key_name: &str, public_key: &str) -> Result<()> {
         KeyManager::validate_public_key(public_key)?;
         self.public_keys
@@ -148,7 +142,6 @@ impl EncryptedVault {
     }
 
     /// Retrieve a public key from the vault.
-    #[must_use]
     pub fn retrieve_public_key(&self, key_name: &str) -> Result<String> {
         self.public_keys
             .get(key_name)
