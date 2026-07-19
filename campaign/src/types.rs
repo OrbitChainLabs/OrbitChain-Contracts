@@ -302,6 +302,12 @@ pub enum DataKey {
     ReentrancyLock,
     /// Freeze flag; present and true = contract is frozen, mutating ops blocked.
     Frozen,
+
+    // ── Persistent (appended — issue #118) ──────────────────────────────────
+    /// All milestones as one `Vec<MilestoneData>` under a single key, so an
+    /// unlock burst is one read + one write instead of N of each. Appended at
+    /// the end of the enum so existing key encodings are untouched.
+    MilestonesVec,
 }
 
 // ─── Asset types ──────────────────────────────────────────────────────────────

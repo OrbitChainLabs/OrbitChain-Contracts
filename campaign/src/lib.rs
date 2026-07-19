@@ -31,7 +31,7 @@ use storage::{
     set_donor, set_frozen, set_milestone, storage_get_donation_count, storage_get_release_count,
     storage_get_total_raised, storage_get_unique_donor_count, storage_increment_asset_raised,
     storage_increment_donation_count, storage_increment_unique_donor_count,
-    storage_set_total_raised,
+    storage_set_total_raised, unlock_milestones_batch,
 };
 
 use types::{
@@ -230,23 +230,11 @@ impl CampaignContract {
             storage_increment_unique_donor_count(&env);
         }
 
-        // Issue #195 – milestone unlock check
-        for i in 0..campaign.milestone_count {
-            if let Some(mut milestone) = get_milestone(&env, i) {
-                if milestone.status == MilestoneStatus::Locked
-                    && campaign.raised_amount >= milestone.target_amount
-                {
-                    milestone.status = MilestoneStatus::Unlocked;
-                    set_milestone(&env, i, &milestone);
-                    // Emit milestone_unlocked event
-                    event::milestone_unlocked(
-                        &env,
-                        i,
-                        milestone.target_amount,
-                        campaign.raised_amount,
-                    );
-                }
-            }
+        // Issue #195 – milestone unlock check.
+        // Issue #118 – batched: one storage read + at most one write for the
+        // whole burst, instead of a read/write pair per milestone.
+        for (index, target_amount) in unlock_milestones_batch(&env, campaign.raised_amount).iter() {
+            event::milestone_unlocked(&env, index, target_amount, campaign.raised_amount);
         }
 
         // Emit donation_received event
@@ -824,6 +812,7 @@ mod test {
     pub mod get_campaign_status_tests;
     pub mod integration_tests;
     pub mod invariant_tests;
+    pub mod milestone_batch_tests;
     pub mod negative_path_tests;
     pub mod refund_eligibility_tests;
     pub mod release_milestone_tests;

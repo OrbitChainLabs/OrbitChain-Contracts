@@ -93,11 +93,11 @@ fn bump_storage_extends_core_and_milestone_ttls() {
 
         // Writes bump on access, so entries start at full TTL. Advance the
         // ledger until every remaining TTL is below the bump threshold.
+        // (Milestones live under the single MilestonesVec key — issue #118.)
         env.ledger().with_mut(|l| l.sequence_number += DRIFT);
         for key in [
             DataKey::CampaignData,
-            DataKey::MilestoneData(0),
-            DataKey::MilestoneData(1),
+            DataKey::MilestonesVec,
             DataKey::TotalRaised,
         ] {
             assert!(
@@ -110,8 +110,7 @@ fn bump_storage_extends_core_and_milestone_ttls() {
 
         for key in [
             DataKey::CampaignData,
-            DataKey::MilestoneData(0),
-            DataKey::MilestoneData(1),
+            DataKey::MilestonesVec,
             DataKey::TotalRaised,
         ] {
             assert_eq!(
@@ -128,10 +127,32 @@ fn bump_storage_tolerates_unwritten_milestone_slots() {
     let env = make_env();
     with_contract(&env, || {
         // Declares 3 milestones but only writes the first — the bump must
-        // skip the missing keys instead of panicking (`extend_ttl` panics
-        // on absent entries; `bump_all_persistent` guards with `has()`).
+        // skip missing keys instead of panicking (`extend_ttl` panics on
+        // absent entries; `bump_all_persistent` guards with `has()`).
         setup_campaign(&env, 3);
         set_milestone(&env, 0, &milestone(&env, 0, 1_000));
+
+        env.ledger().with_mut(|l| l.sequence_number += DRIFT);
+        CampaignContract::bump_storage(env.clone());
+
+        assert_eq!(
+            remaining_ttl(&env, &DataKey::MilestonesVec),
+            PERSISTENT_BUMP_AMOUNT
+        );
+    });
+}
+
+#[test]
+fn bump_storage_still_bumps_legacy_per_index_entries() {
+    let env = make_env();
+    with_contract(&env, || {
+        // A contract initialized before the #118 layout change has one entry
+        // per milestone index and no MilestonesVec. bump_storage must keep
+        // those alive too (pre-migration contracts).
+        setup_campaign(&env, 1);
+        env.storage()
+            .persistent()
+            .set(&DataKey::MilestoneData(0), &milestone(&env, 0, 1_000));
 
         env.ledger().with_mut(|l| l.sequence_number += DRIFT);
         CampaignContract::bump_storage(env.clone());
