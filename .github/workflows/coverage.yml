@@ -1,0 +1,79 @@
+name: Coverage
+
+# Enforce a test-coverage floor with cargo-llvm-cov (issue #114).
+#
+# Scope matches the CI test job: the four Soroban contract crates. The
+# native CLI crate joins the gate once #164 (tool CI coverage) lands and
+# the crate builds on main — flipping the -p list to --workspace is the
+# only change needed then.
+#
+# Lives in its own workflow file rather than ci.yml so it composes cleanly
+# with the other in-flight ci.yml changes (#164 tool jobs, #172 OS matrix).
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: coverage-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  CONTRACTS: >-
+    -p orbitchain-campaign
+    -p orbitchain-common
+    -p orbitchain-core
+    -p orbitchain-token-bridge
+  # Coverage floor (line coverage, percent) — the value issue #114 asks for.
+  # Measured baseline at introduction: 83.71%, so the gate is green on
+  # arrival with headroom and blocks meaningful regressions. Ratchet upward
+  # as coverage improves.
+  FAIL_UNDER: "80"
+
+jobs:
+  coverage:
+    name: Line-coverage gate (cargo-llvm-cov)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain with llvm-tools
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+          cache: false
+      - name: Cache cargo registry and target
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - name: Install cargo-llvm-cov (prebuilt)
+        uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Coverage with threshold gate
+        # Fails the job — and therefore the PR — if line coverage drops
+        # below $FAIL_UNDER (acceptance criterion for #114).
+        run: >
+          cargo llvm-cov ${{ env.CONTRACTS }}
+          --lcov --output-path lcov.info
+          --fail-under-lines ${{ env.FAIL_UNDER }}
+      - name: Upload to Codecov (trend tracking)
+        # Tokenless upload works for public repos; the gate above is the
+        # enforcement, so a Codecov hiccup must not fail CI.
+        uses: codecov/codecov-action@v4
+        continue-on-error: true
+        with:
+          files: lcov.info
+          fail_ci_if_error: false
+      - name: Archive lcov report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-lcov
+          path: lcov.info
+          retention-days: 14
