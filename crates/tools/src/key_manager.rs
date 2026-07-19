@@ -172,7 +172,7 @@ mod tests {
     #[test]
     fn test_encrypt_decrypt_roundtrip() -> Result<()> {
         let manager = KeyManager::from_password("my_secure_password")?;
-        let secret_key = "SBZXVMIRWXL5VZVKXWV2FGKYTQ5VV5VRNJYQVZKYWW3XYVYP3IXGKDU";
+        let secret_key = "SDU3MUQQMASWGMAY2P6ZILNP2V77BWU5NF3R6X4YDNOHPNXZYLHTXNPV";
 
         let encrypted = manager.encrypt_key(secret_key)?;
         let decrypted = manager.decrypt_key(&encrypted)?;
@@ -184,7 +184,7 @@ mod tests {
     #[test]
     fn test_export_import_roundtrip() -> Result<()> {
         let manager = KeyManager::from_password("another_password")?;
-        let secret_key = "SBZXVMIRWXL5VZVKXWV2FGKYTQ5VV5VRNJYQVZKYWW3XYVYP3IXGKDU";
+        let secret_key = "SDU3MUQQMASWGMAY2P6ZILNP2V77BWU5NF3R6X4YDNOHPNXZYLHTXNPV";
 
         let exported = manager.export_encrypted(secret_key)?;
         let imported = manager.import_encrypted(&exported)?;
@@ -197,7 +197,7 @@ mod tests {
     #[test]
     fn test_wrong_password_fails() -> Result<()> {
         let manager1 = KeyManager::from_password("password1")?;
-        let secret_key = "SBZXVMIRWXL5VZVKXWV2FGKYTQ5VV5VRNJYQVZKYWW3XYVYP3IXGKDU";
+        let secret_key = "SDU3MUQQMASWGMAY2P6ZILNP2V77BWU5NF3R6X4YDNOHPNXZYLHTXNPV";
 
         let encrypted = manager1.encrypt_key(secret_key)?;
 
@@ -211,21 +211,21 @@ mod tests {
 
     #[test]
     fn test_validate_secret_key() {
-        assert!(KeyManager::validate_secret_key("SBZXVMIRWXL5VZVKXWV2FGKYTQ5VV5VRNJYQVZKYWW3XYVYP3IXGKDU").is_ok());
-        assert!(KeyManager::validate_secret_key("GBZXVMIRWXL5VZVKXWV2FGKYTQ5VV5VRNJYQVZKYWW3XYVYP3IXGKDU").is_err());
+        assert!(KeyManager::validate_secret_key("SDU3MUQQMASWGMAY2P6ZILNP2V77BWU5NF3R6X4YDNOHPNXZYLHTXNPV").is_ok());
+        assert!(KeyManager::validate_secret_key("GATOACHAPPG72R2KKG5K47ORQVZKGBQ4UYVWLIYITEKMNFXQLNPJFJI3").is_err());
         assert!(KeyManager::validate_secret_key("short").is_err());
     }
 
     #[test]
     fn test_validate_public_key() {
-        assert!(KeyManager::validate_public_key("GBZXVMIRWXL5VZVKXWV2FGKYTQ5VV5VRNJYQVZKYWW3XYVYP3IXGKDU").is_ok());
-        assert!(KeyManager::validate_public_key("SBZXVMIRWXL5VZVKXWV2FGKYTQ5VV5VRNJYQVZKYWW3XYVYP3IXGKDU").is_err());
+        assert!(KeyManager::validate_public_key("GATOACHAPPG72R2KKG5K47ORQVZKGBQ4UYVWLIYITEKMNFXQLNPJFJI3").is_ok());
+        assert!(KeyManager::validate_public_key("SDU3MUQQMASWGMAY2P6ZILNP2V77BWU5NF3R6X4YDNOHPNXZYLHTXNPV").is_err());
     }
 
     #[test]
     fn test_encrypted_key_zeroizes_on_drop() {
         let manager = KeyManager::from_password("password").unwrap();
-        let secret_key = "SBZXVMIRWXL5VZVKXWV2FGKYTQ5VV5VRNJYQVZKYWW3XYVYP3IXGKDU";
+        let secret_key = "SDU3MUQQMASWGMAY2P6ZILNP2V77BWU5NF3R6X4YDNOHPNXZYLHTXNPV";
         let _encrypted = manager.encrypt_key(secret_key).unwrap();
         // When _encrypted goes out of scope, it should zeroize
         // (can't directly test zeroization, but ensures Drop runs without panic)

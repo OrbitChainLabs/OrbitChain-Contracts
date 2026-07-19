@@ -429,7 +429,9 @@ stellar contract invoke \
 
 - Discover global fundraising campaigns
 - Donate in XLM or Stellar assets
-- Wallet integration (Freighter, Albedo, Lobstr)
+- Wallet integration: Freighter on desktop, Lobstr/Bitnovo/other SEP-0007
+  wallets via mobile deep link + SEP-10 auth — see
+  [`docs/tutorials/dapp-integration.md`](docs/tutorials/dapp-integration.md)
 - On-chain transparency: verify all transactions
 
 ### 🎯 For Creators

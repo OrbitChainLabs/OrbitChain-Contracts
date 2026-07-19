@@ -33,7 +33,7 @@ impl SecureVault {
         }
     }
 
-        /// Validate that required keys are present for mainnet operations.
+    /// Validate that required keys are present for mainnet operations.
     #[must_use]
     pub fn validate_for_mainnet(&self) -> Result<()> {
         if self.admin_secret_key.is_none() {
@@ -107,109 +107,6 @@ impl SecureVault {
         }
     }
 
-impl Default for SecureVault {
-    fn default() -> Self {
-        Self {
-            admin_secret_key: None,
-            admin_public_key: None,
-            issuing_secret_key: None,
-            issuing_public_key: None,
-        }
-    }
-}
-
-    pub fn save_to_file(&self, _path: &str) -> Result<()> {
-        eprintln!("🚨 ERROR: SecureVault::save_to_file() stores keys in PLAINTEXT.");
-        eprintln!("   Use EncryptedVault::save_to_file() instead.");
-        eprintln!("   Example: orbitchain-cli keymanager vault-save <path>");
-        anyhow::bail!("Plaintext vault save disabled for security. Use EncryptedVault.");
-    }
-
-    /// Load vault from file
-    pub fn load_from_file(path: &str) -> Result<Self> {
-        let content = fs::read_to_string(path).context("Failed to read vault file")?;
-
-        let mut vault = Self {
-            admin_secret_key: None,
-            admin_public_key: None,
-            issuing_secret_key: None,
-            issuing_public_key: None,
-        };
-
-        for line in content.lines() {
-            if line.starts_with('#') || line.trim().is_empty() {
-                continue;
-            }
-
-            let parts: Vec<&str> = line.splitn(2, '=').collect();
-            if parts.len() == 2 {
-                match parts[0] {
-                    "SOROBAN_ADMIN_SECRET_KEY" => {
-                        vault.admin_secret_key = Some(parts[1].to_string())
-                    }
-                    "SOROBAN_ADMIN_PUBLIC_KEY" => {
-                        vault.admin_public_key = Some(parts[1].to_string())
-                    }
-                    "SOROBAN_ISSUING_SECRET_KEY" => {
-                        vault.issuing_secret_key = Some(parts[1].to_string())
-                    }
-                    "SOROBAN_ISSUING_PUBLIC_KEY" => {
-                        vault.issuing_public_key = Some(parts[1].to_string())
-                    }
-                    _ => {}
-                }
-            }
-        }
-
-        Ok(vault)
-    }
-}
-
-/// Check mainnet configuration readiness
-pub fn check_mainnet_readiness() -> Result<()> {
-    let vault = SecureVault::from_env();
-
-    println!("🔒 Mainnet Configuration Check");
-    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-
-    // Validate vault
-    if let Err(e) = vault.validate_for_mainnet() {
-        println!("❌ Mainnet validation failed: {}", e);
-        println!();
-        println!("💡 To configure mainnet:");
-        println!("   1. Set SOROBAN_NETWORK=mainnet in .env");
-        println!("   2. Set SOROBAN_ADMIN_SECRET_KEY=<your_secret_key>");
-        println!("   3. Set SOROBAN_ADMIN_PUBLIC_KEY=<your_public_key>");
-        println!("   4. Ensure you have sufficient XLM for transaction fees");
-        return Err(e);
-    }
-
-    println!("✅ Admin keys configured");
-    vault.display_safe();
-
-    println!();
-    println!("✅ Mainnet configuration is ready");
-    println!("⚠️  WARNING: Mainnet transactions use real XLM!");
-
-    Ok(())
-}
-
-/// Toggle between testnet and mainnet configurations
-pub fn toggle_network(network: &str) -> Result<()> {
-    match network {
-        "testnet" => {
-            println!("🔄 Switching to TESTNET...");
-            println!("✅ Network: testnet");
-            println!("💡 Use testnet for development and testing");
-        }
-        "mainnet" => {
-            println!("🔄 Switching to MAINNET...");
-            check_mainnet_readiness()?;
-        }
-        _ => anyhow::bail!("Unknown network: {}. Use 'testnet' or 'mainnet'", network),
-    }
-
-    
     /// # Deprecated
     /// This method stores keys in plaintext. Use `EncryptedVault::save_to_file()` instead.
     pub fn save_to_file(&self, _path: &str) -> Result<()> {
@@ -256,6 +153,17 @@ pub fn toggle_network(network: &str) -> Result<()> {
         }
 
         Ok(vault)
+    }
+}
+
+impl Default for SecureVault {
+    fn default() -> Self {
+        Self {
+            admin_secret_key: None,
+            admin_public_key: None,
+            issuing_secret_key: None,
+            issuing_public_key: None,
+        }
     }
 }
 

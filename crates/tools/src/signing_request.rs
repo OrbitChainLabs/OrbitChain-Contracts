@@ -20,11 +20,13 @@ use std::env;
 /// `A-Z` followed by `2-7`.
 const CROCKFORD_ALPHABET: &[u8; 32] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
-/// Version byte prefixing Stellar ed25519 public account IDs (`G…`).
-const ED25519_PUBLIC_VERSION_BYTE: u8 = b'G';
+/// Version byte prefixing Stellar ed25519 public account IDs. Base32-encodes
+/// to a leading `G` (6 << 3 = 0x30, per SEP-23).
+const ED25519_PUBLIC_VERSION_BYTE: u8 = 6 << 3;
 
-/// Version byte prefixing Stellar ed25519 secret seeds (`S…`).
-const ED25519_SEED_VERSION_BYTE: u8 = b'S';
+/// Version byte prefixing Stellar ed25519 secret seeds. Base32-encodes to a
+/// leading `S` (18 << 3 = 0x90, per SEP-23).
+const ED25519_SEED_VERSION_BYTE: u8 = 18 << 3;
 
 /// Decoded strkey length in bytes: 1 version byte + 32 key bytes + 2 CRC16 bytes.
 const STRKEY_DECODED_LEN: usize = 35;
@@ -284,7 +286,8 @@ impl ServerSignedTransaction {
                 sig_bytes.len()
             );
         }
-        let signature = Signature::from_bytes(&sig_bytes);
+        let signature = Signature::from_slice(&sig_bytes)
+            .map_err(|e| anyhow!("Invalid Ed25519 signature bytes: {}", e))?;
 
         Ok(verifying_key
             .verify(self.transaction_xdr.as_bytes(), &signature)
@@ -307,8 +310,7 @@ impl SigningRequest {
         crate::key_manager::KeyManager::validate_secret_key(secret_key)?;
 
         let seed_bytes = strkey_decode(secret_key, "secret")?;
-        let signing_key = SigningKey::from_bytes(&seed_bytes)
-            .map_err(|e| anyhow!("Invalid Stellar secret seed for Ed25519 keypair: {}", e))?;
+        let signing_key = SigningKey::from_bytes(&seed_bytes);
         let verifying_key = signing_key.verifying_key();
 
         // `SigningKey::sign` (from the `Signer` trait) is RFC 8032
@@ -453,9 +455,9 @@ mod tests {
     /// Public key is the canonical Ed25519 point derived from the seed;
     /// signing and verifying should never produce a different public key.
     const FIXTURE_SECRET: &str =
-        "SBZXVMIRWXL5VZVKXWV2FGKYTQ5VV5VRNJYQVZKYWW3XYVYP3IXGKDU";
+        "SDU3MUQQMASWGMAY2P6ZILNP2V77BWU5NF3R6X4YDNOHPNXZYLHTXNPV";
     const FIXTURE_PUBLIC: &str =
-        "GBZXVMIRWXL5VZVKXWV2FGKYTQ5VV5VRNJYQVZKYWW3XYVYP3IXGKDU";
+        "GATOACHAPPG72R2KKG5K47ORQVZKGBQ4UYVWLIYITEKMNFXQLNPJFJI3";
 
     fn fixture_request() -> SigningRequest {
         SigningRequest {
@@ -587,7 +589,7 @@ mod tests {
         // Sign with one secret, then swap in an unrelated public key.
         let mut signed = req.sign_server_side(FIXTURE_SECRET).unwrap();
         signed.signer_public_key =
-            "GCNVD4NI7K2SVQHCB4QKV3WMZ5XS3DMMVJCTPCBU3HJZRJQZTIPMXBNP".to_string();
+            "GAB2CB576PHBBPQ5ODORRZ2LYCMWPZGWGCN2KDK7DXOIMZASKUY3QZ6Q".to_string();
         assert!(!signed.verify().unwrap());
     }
 
@@ -622,7 +624,7 @@ mod tests {
         let req = fixture_request();
         let sig1 = req.sign_server_side(FIXTURE_SECRET).unwrap().signature;
         let sig2 = req
-            .sign_server_side("SCZANGBA5QDPSBM5QOTSXSI7JKEFYABMUQRPTGMWNJKFA5ENDNSQSTE")
+            .sign_server_side("SAAACAQDAQCQMBYIBEFAWDANBYHRAEISCMKBKFQXDAMRUGY4DUPB6NKI")
             .unwrap()
             .signature;
         assert_ne!(sig1, sig2);

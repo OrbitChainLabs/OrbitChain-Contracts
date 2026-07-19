@@ -214,8 +214,8 @@ mod tests {
     #[test]
     fn test_master_keypair_validate() {
         let keypair = MasterKeypair {
-            public_key: "GBZXVMIRWXL5VZVKXWV2FGKYTQ5VV5VRNJYQVZKYWW3XYVYP3IXGKDU".to_string(),
-            secret_key: "SBZXVMIRWXL5VZVKXWV2FGKYTQ5VV5VRNJYQVZKYWW3XYVYP3IXGKDU".to_string(),
+            public_key: "GATOACHAPPG72R2KKG5K47ORQVZKGBQ4UYVWLIYITEKMNFXQLNPJFJI3".to_string(),
+            secret_key: "SDU3MUQQMASWGMAY2P6ZILNP2V77BWU5NF3R6X4YDNOHPNXZYLHTXNPV".to_string(),
             network: "testnet".to_string(),
         };
         assert!(keypair.validate().is_ok());
@@ -224,9 +224,9 @@ mod tests {
     #[test]
     fn test_distribution_account_different_from_issuing() {
         let dist = DistributionAccount {
-            public_key: "GBZXVMIRWXL5VZVKXWV2FGKYTQ5VV5VRNJYQVZKYWW3XYVYP3IXGKDU".to_string(),
-            secret_key: "SBZXVMIRWXL5VZVKXWV2FGKYTQ5VV5VRNJYQVZKYWW3XYVYP3IXGKDU".to_string(),
-            issuing_public_key: "GBZXVMIRWXL5VZVKXWV2FGKYTQ5VV5VRNJYQVZKYWW3XYVYP3IXGKDU".to_string(),
+            public_key: "GATOACHAPPG72R2KKG5K47ORQVZKGBQ4UYVWLIYITEKMNFXQLNPJFJI3".to_string(),
+            secret_key: "SDU3MUQQMASWGMAY2P6ZILNP2V77BWU5NF3R6X4YDNOHPNXZYLHTXNPV".to_string(),
+            issuing_public_key: "GATOACHAPPG72R2KKG5K47ORQVZKGBQ4UYVWLIYITEKMNFXQLNPJFJI3".to_string(),
             network: "testnet".to_string(),
         };
         // Should fail because they're the same
@@ -236,7 +236,7 @@ mod tests {
     #[test]
     fn test_account_funding_positive_amount() -> Result<()> {
         let mut funding = AccountFunding::new(
-            "GBZXVMIRWXL5VZVKXWV2FGKYTQ5VV5VRNJYQVZKYWW3XYVYP3IXGKDU",
+            "GATOACHAPPG72R2KKG5K47ORQVZKGBQ4UYVWLIYITEKMNFXQLNPJFJI3",
             "testnet"
         )?;
         funding.fund_testnet(100.0)?;
@@ -248,7 +248,7 @@ mod tests {
     #[test]
     fn test_account_funding_invalid_amount() -> Result<()> {
         let mut funding = AccountFunding::new(
-            "GBZXVMIRWXL5VZVKXWV2FGKYTQ5VV5VRNJYQVZKYWW3XYVYP3IXGKDU",
+            "GATOACHAPPG72R2KKG5K47ORQVZKGBQ4UYVWLIYITEKMNFXQLNPJFJI3",
             "testnet"
         )?;
         let result = funding.fund_testnet(-50.0);
@@ -259,7 +259,7 @@ mod tests {
     #[test]
     fn test_account_funding_mainnet_fails() -> Result<()> {
         let mut funding = AccountFunding::new(
-            "GBZXVMIRWXL5VZVKXWV2FGKYTQ5VV5VRNJYQVZKYWW3XYVYP3IXGKDU",
+            "GATOACHAPPG72R2KKG5K47ORQVZKGBQ4UYVWLIYITEKMNFXQLNPJFJI3",
             "mainnet"
         )?;
         let result = funding.fund_testnet(100.0);

@@ -1,0 +1,178 @@
+name: Release
+
+# Publish downloadable, signed release artifacts (WASM contracts + a bundle
+# tarball) whenever a version tag is pushed. Downstream integrators consume
+# these from the GitHub Release page instead of building from source.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# contents:write  -> create the GitHub Release and upload assets
+# id-token:write  -> request an OIDC token for keyless (Sigstore) signing
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  # One release run per tag; never cancel a release in flight.
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: short
+  # The Soroban contract crates that compile to wasm32. Kept in sync with the
+  # CONTRACTS list in ci.yml — crates/tools is a native CLI, not a contract.
+  CONTRACTS: >-
+    -p orbitchain-campaign
+    -p orbitchain-common
+    -p orbitchain-core
+    -p orbitchain-token-bridge
+
+jobs:
+  release:
+    name: Build, sign, and publish artifacts
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so --generate-notes can build the changelog.
+          fetch-depth: 0
+
+      - name: Install Rust toolchain with wasm target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          # wasm32v1-none is the target Soroban SDK 26.x requires on stable
+          # Rust — see the note in ci.yml's wasm-check job.
+          targets: wasm32v1-none
+          cache: false
+
+      - name: Cache cargo registry and target
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Install wasm-opt (binaryen)
+        run: sudo apt-get update && sudo apt-get install -y binaryen
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Build WASM contracts (release)
+        run: cargo build ${{ env.CONTRACTS }} --target wasm32v1-none --release
+
+      - name: Package artifacts
+        run: |
+          set -euo pipefail
+
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          WASM_DIR="target/wasm32v1-none/release"
+          DIST="dist"
+          BUNDLE="orbitchain-contracts-${VERSION}-wasm.tar.gz"
+
+          mkdir -p "$DIST"
+
+          # Copy each contract wasm into dist and shrink it with wasm-opt -Oz,
+          # matching the repo's `make optimize` target.
+          for wasm in \
+            orbitchain_campaign.wasm \
+            orbitchain_common.wasm \
+            orbitchain_core.wasm \
+            orbitchain_token_bridge.wasm; do
+            cp "$WASM_DIR/$wasm" "$DIST/$wasm"
+            before=$(wc -c < "$DIST/$wasm")
+            wasm-opt -Oz "$DIST/$wasm" -o "$DIST/$wasm.opt"
+            mv "$DIST/$wasm.opt" "$DIST/$wasm"
+            after=$(wc -c < "$DIST/$wasm")
+            echo "  $wasm: ${before}B -> ${after}B"
+          done
+
+          # Bundle the optimized wasm files into a single tarball for
+          # consumers who want one download.
+          tar -czf "$DIST/$BUNDLE" -C "$DIST" \
+            orbitchain_campaign.wasm \
+            orbitchain_common.wasm \
+            orbitchain_core.wasm \
+            orbitchain_token_bridge.wasm
+
+          # Checksums over every published file, computed from inside dist so
+          # the manifest holds bare filenames.
+          ( cd "$DIST" && sha256sum ./*.wasm "$BUNDLE" > SHA256SUMS )
+
+          echo "Packaged artifacts:"
+          ls -la "$DIST"
+
+      - name: Sign artifacts (keyless)
+        run: |
+          set -euo pipefail
+          cd dist
+          # Keyless Sigstore signing: no long-lived keys, identity is bound to
+          # this workflow via the OIDC token. Emits a detached .sig plus the
+          # signing certificate (.pem) for each wasm, the bundle, and the
+          # checksum manifest.
+          for f in ./*.wasm *.tar.gz SHA256SUMS; do
+            cosign sign-blob --yes "$f" \
+              --output-signature "$f.sig" \
+              --output-certificate "$f.pem"
+          done
+          echo "Signed artifacts:"
+          ls -la
+
+      - name: Write release notes
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          REPO="${GITHUB_REPOSITORY}"
+          WORKFLOW_REF="https://github.com/${REPO}/.github/workflows/release.yml@refs/tags/${TAG}"
+
+          {
+            echo "## Artifacts"
+            echo
+            echo "This release contains the optimized Soroban contract WASM files, a"
+            echo "\`*-wasm.tar.gz\` bundle of all of them, and a \`SHA256SUMS\` manifest."
+            echo "Every artifact is signed with [Sigstore](https://www.sigstore.dev/)"
+            echo "keyless signing (\`.sig\` + \`.pem\`)."
+            echo
+            echo "### Verify checksums"
+            echo
+            echo '```bash'
+            echo "sha256sum -c SHA256SUMS"
+            echo '```'
+            echo
+            echo "### Verify signatures"
+            echo
+            echo '```bash'
+            echo "cosign verify-blob \\"
+            echo "  --certificate-identity \"${WORKFLOW_REF}\" \\"
+            echo "  --certificate-oidc-issuer https://token.actions.githubusercontent.com \\"
+            echo "  --signature <file>.sig \\"
+            echo "  --certificate <file>.pem \\"
+            echo "  <file>"
+            echo '```'
+            echo
+          } > NOTES.md
+          cat NOTES.md
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+
+          # Pre-releases are anything with a pre-release suffix, e.g. v1.0.0-rc1.
+          PRERELEASE=""
+          case "$TAG" in
+            *-*) PRERELEASE="--prerelease" ;;
+          esac
+
+          gh release create "$TAG" dist/* \
+            --title "OrbitChain Contracts $TAG" \
+            --notes-file NOTES.md \
+            --generate-notes \
+            --verify-tag \
+            $PRERELEASE

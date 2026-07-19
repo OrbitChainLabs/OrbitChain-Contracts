@@ -1,0 +1,17 @@
+{
+  "name": "orbitchain-wallet-connect",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Browser wallet-connect client (Freighter + mobile SEP-10 deep link) and its dev/test tooling. The Soroban contracts live in the Cargo workspace; this package only covers the static wallet_connect.html/js surface.",
+  "scripts": {
+    "sep10:server": "node scripts/sep10-server.mjs",
+    "smoke:sep10": "bash scripts/smoke-test-sep10.sh",
+    "test": "node --test wallet_connect.test.js",
+    "test:e2e": "playwright test",
+    "test:e2e:install": "playwright install --with-deps chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.47.0",
+    "@stellar/stellar-sdk": "^12.3.0"
+  }
+}
