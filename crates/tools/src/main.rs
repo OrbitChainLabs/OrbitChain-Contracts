@@ -17,11 +17,11 @@ use tracing_subscriber::EnvFilter;
 // The binary consumes the library crate instead of re-declaring each module
 // with `mod` — the duplicate-module pattern compiled every file twice and
 // flagged every helper the CLI doesn't call as dead code in the bin target.
-use orbitchain_tools::deploy;
 use orbitchain_tools::asset_issuing::{
     check_issuing_readiness, establish_trustline, generate_issuing_keypair, issue_asset,
     AssetConfig, TrustlineConfig,
 };
+use orbitchain_tools::deploy;
 use orbitchain_tools::encrypted_vault::EncryptedVault;
 use orbitchain_tools::environment_config::EnvironmentConfig;
 use orbitchain_tools::key_manager::KeyManager;
@@ -103,8 +103,6 @@ fn init_logging(format: LogFormat) {
         LogFormat::Human => builder.with_writer(std::io::stderr).init(),
     }
 }
-
-mod deploy;
 
 fn main() -> Result<()> {
     dotenv::dotenv().ok();

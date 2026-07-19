@@ -37,7 +37,10 @@ impl Network {
             "testnet" => Ok(Self::Testnet),
             "mainnet" => Ok(Self::Mainnet),
             "sandbox" => Ok(Self::Sandbox),
-            other => bail!("Unknown network: {} (use testnet | sandbox | mainnet)", other),
+            other => bail!(
+                "Unknown network: {} (use testnet | sandbox | mainnet)",
+                other
+            ),
         }
     }
 
@@ -130,7 +133,10 @@ pub fn parse_args(args: &[String]) -> Result<DeployArgs> {
             }
             positional => {
                 if parsed.network.is_some() {
-                    bail!("Unexpected argument: {} (network already given)", positional);
+                    bail!(
+                        "Unexpected argument: {} (network already given)",
+                        positional
+                    );
                 }
                 parsed.network = Some(positional.to_string());
             }
@@ -190,8 +196,7 @@ pub fn contract_id_from_stdout(stdout: &str) -> Option<String> {
     stdout
         .lines()
         .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .next_back()
+        .rfind(|line| !line.is_empty())
         .map(str::to_string)
 }
 
@@ -201,8 +206,13 @@ fn print_usage() {
     println!("Deploy the OrbitChain core contract (Rust mirror of scripts/deploy.sh).");
     println!();
     println!("Arguments:");
-    println!("  network            testnet | sandbox | mainnet (default: $SOROBAN_NETWORK or testnet)");
-    println!("  --wasm <path>      WASM artifact (default: {})", DEFAULT_WASM_PATH);
+    println!(
+        "  network            testnet | sandbox | mainnet (default: $SOROBAN_NETWORK or testnet)"
+    );
+    println!(
+        "  --wasm <path>      WASM artifact (default: {})",
+        DEFAULT_WASM_PATH
+    );
     println!("  --force            Re-deploy even if deployments/<network>.json exists");
     println!();
     println!("Environment (loaded from .env if present):");
@@ -245,7 +255,9 @@ pub fn run(args: &[String]) -> Result<()> {
             wasm_path.display()
         );
     }
-    let secret = env::var("SOROBAN_ADMIN_SECRET_KEY").ok().filter(|s| !s.is_empty());
+    let secret = env::var("SOROBAN_ADMIN_SECRET_KEY")
+        .ok()
+        .filter(|s| !s.is_empty());
     let Some(secret) = secret else {
         bail!("SOROBAN_ADMIN_SECRET_KEY is not set. Add it to .env or export it.");
     };
@@ -255,10 +267,20 @@ pub fn run(args: &[String]) -> Result<()> {
     let record_path = Path::new(DEPLOYMENTS_DIR).join(format!("{}.json", network.name()));
     if let Some(existing) = existing_contract_id(&record_path) {
         if parsed.force {
-            println!("   ⚠️  Existing deployment {} — re-deploying (--force).", existing);
+            println!(
+                "   ⚠️  Existing deployment {} — re-deploying (--force).",
+                existing
+            );
         } else {
-            println!("ℹ️  Contract already deployed on {}: {}", network.name(), existing);
-            println!("   Pass --force (or delete {}) to re-deploy.", record_path.display());
+            println!(
+                "ℹ️  Contract already deployed on {}: {}",
+                network.name(),
+                existing
+            );
+            println!(
+                "   Pass --force (or delete {}) to re-deploy.",
+                record_path.display()
+            );
             return Ok(());
         }
     }
@@ -266,7 +288,12 @@ pub fn run(args: &[String]) -> Result<()> {
     // [3/4] Deploy via the stellar CLI — exactly what the shell script runs.
     println!("[3/4] Running stellar contract deploy…");
     let output = Command::new("stellar")
-        .args(stellar_deploy_args(&wasm_path, &secret, &rpc_url, &passphrase))
+        .args(stellar_deploy_args(
+            &wasm_path,
+            &secret,
+            &rpc_url,
+            &passphrase,
+        ))
         .output()
         .map_err(|e| {
             if e.kind() == ErrorKind::NotFound {
@@ -341,7 +368,11 @@ mod tests {
     #[test]
     fn rejects_unknown_network() {
         let err = Network::parse("futurenet").unwrap_err().to_string();
-        assert!(err.contains("futurenet"), "error names the bad input: {}", err);
+        assert!(
+            err.contains("futurenet"),
+            "error names the bad input: {}",
+            err
+        );
     }
 
     #[test]
