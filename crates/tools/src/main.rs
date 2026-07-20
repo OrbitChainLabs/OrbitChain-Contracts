@@ -993,17 +993,18 @@ fn handle_errors(args: &[String]) -> Result<()> {
             println!("📋 Campaign Error Codes ({} total)", mapper.count());
             println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
             println!("{:>4}  {:<35}  Message", "Code", "Name");
-            println!("{:>4}  {:<35}  ──────────────────────────────────────────────", "────", "───────────────────────────────────");
+            println!(
+                "{:>4}  {:<35}  ──────────────────────────────────────────────",
+                "────", "───────────────────────────────────"
+            );
             for entry in mapper.all_entries() {
                 println!("{:>4}  {:<35}  {}", entry.code, entry.name, entry.message);
             }
         }
-        "json" => {
-            match mapper.to_json_array() {
-                Ok(json) => println!("{json}"),
-                Err(e) => println!("❌ Failed to serialise error map: {e}"),
-            }
-        }
+        "json" => match mapper.to_json_array() {
+            Ok(json) => println!("{json}"),
+            Err(e) => println!("❌ Failed to serialise error map: {e}"),
+        },
         "lookup" => {
             if args.len() < 2 {
                 println!("Usage: orbitchain-cli errors lookup <error_code>");
