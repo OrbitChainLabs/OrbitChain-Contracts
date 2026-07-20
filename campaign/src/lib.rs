@@ -672,7 +672,7 @@ impl CampaignContract {
     }
 
     /// Issue #57 – Grant operator status to `operator`, permitting it to call
-    /// operator-only entrypoints (currently `bump_storage`).
+    /// operator-only entrypoints (currently `bump_storage_as_operator`).
     ///
     /// Only the creator can grant operator status.
     ///
@@ -695,15 +695,19 @@ impl CampaignContract {
     /// every milestone record, preventing archival during long-running
     /// campaigns (see `storage::bump_all_persistent`, issue #33).
     ///
-    /// Deliberately restricted to authorised operators rather than public:
-    /// an unrestricted "any caller can bump TTL" entrypoint would let anyone
-    /// force-extend storage rent as a gas/DoS vector.
+    /// Named distinctly from the pre-existing `bump_storage` (issue #120,
+    /// deliberately public/no-auth) to avoid colliding with it. The two
+    /// entrypoints currently coexist: `bump_storage` lets anyone extend TTL,
+    /// which is exactly the "any caller can bump TTL" gas/DoS vector this
+    /// ticket's security note warns about. This entrypoint is the
+    /// operator-gated alternative; see the PR description for the tradeoff
+    /// and a suggestion to reconcile the two.
     ///
     /// # Panics
     /// - `Error::Unauthorized` if `operator` has not been granted operator
     ///   status via `add_operator`
     /// - `Error::NotInitialized` if campaign not yet initialized
-    pub fn bump_storage(env: Env, operator: Address) {
+    pub fn bump_storage_as_operator(env: Env, operator: Address) {
         operator.require_auth();
 
         let campaign =

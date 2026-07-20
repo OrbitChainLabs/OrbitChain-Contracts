@@ -1,5 +1,10 @@
 //! Issue #57 — `bump-storage` CLI wiring for the operator-only
-//! `bump_storage` contract entrypoint.
+//! `bump_storage_as_operator` contract entrypoint.
+//!
+//! Named `bump_storage_as_operator` rather than `bump_storage` because issue
+//! #120 already shipped a `bump_storage(env)` that is deliberately public
+//! and requires no auth. Both entrypoints exist on the contract; see the PR
+//! description for the resulting overlap.
 //!
 //! This binary does not embed a Soroban RPC client (see docs/deployment.md
 //! "Known Limitations"), so — like `scripts/deploy.sh` — real on-chain
@@ -24,17 +29,21 @@ pub fn derive_public_key(secret_key: &str) -> Result<String> {
     Ok(format!("{}", public_key))
 }
 
-/// Invoke the operator-only `bump_storage` entrypoint on a deployed campaign
-/// contract, refreshing the TTL of every core persistent key plus every
-/// milestone so long-running campaigns are not archived.
+/// Invoke the operator-only `bump_storage_as_operator` entrypoint on a
+/// deployed campaign contract, refreshing the TTL of every core persistent
+/// key plus every milestone so long-running campaigns are not archived.
 ///
 /// Requires `operator_secret_key` to belong to an address already granted
 /// operator status via the contract's `add_operator` (creator-gated).
-pub fn invoke_bump_storage(contract_id: &str, operator_secret_key: &str, network: &str) -> Result<()> {
+pub fn invoke_bump_storage(
+    contract_id: &str,
+    operator_secret_key: &str,
+    network: &str,
+) -> Result<()> {
     KeyManager::validate_secret_key(operator_secret_key)?;
     let operator_public_key = derive_public_key(operator_secret_key)?;
 
-    println!("🔄 Invoking bump_storage");
+    println!("🔄 Invoking bump_storage_as_operator");
     println!("Contract: {}", contract_id);
     println!("Operator: {}", operator_public_key);
     println!("Network:  {}", network);
@@ -53,7 +62,7 @@ pub fn invoke_bump_storage(contract_id: &str, operator_secret_key: &str, network
             "--network",
             network,
             "--",
-            "bump_storage",
+            "bump_storage_as_operator",
             "--operator",
             &operator_public_key,
         ])
@@ -68,7 +77,7 @@ pub fn invoke_bump_storage(contract_id: &str, operator_secret_key: &str, network
         );
     }
 
-    println!("✅ bump_storage invoked successfully");
+    println!("✅ bump_storage_as_operator invoked successfully");
     Ok(())
 }
 

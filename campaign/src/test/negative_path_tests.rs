@@ -1137,33 +1137,38 @@ fn test_extend_deadline_not_frozen_succeeds() {
     });
 }
 
-// ─── Operator role / bump_storage tests (issue #57) ─────────────────────────
+// ─── Operator role / bump_storage_as_operator tests (issue #57) ─────────────
+//
+// Named `bump_storage_as_operator` rather than `bump_storage` because issue
+// #120 already claimed that name for a deliberately public, no-auth TTL
+// maintenance entrypoint (see `bump_storage_tests.rs`). See the PR
+// description for the resulting security tension between the two.
 
 #[test]
 #[should_panic(expected = "Error(Contract, #3)")]
-fn test_bump_storage_fails_without_operator_role() {
+fn test_bump_storage_as_operator_fails_without_operator_role() {
     let env = make_env();
     env.mock_all_auths();
     with_contract(&env, || {
         initialize_default_campaign(&env);
         let stranger = Address::generate(&env);
-        CampaignContract::bump_storage(env.clone(), stranger);
+        CampaignContract::bump_storage_as_operator(env.clone(), stranger);
     });
 }
 
 #[test]
 #[should_panic]
-fn test_bump_storage_fails_not_initialized() {
+fn test_bump_storage_as_operator_fails_not_initialized() {
     let env = make_env();
     env.mock_all_auths();
     with_contract(&env, || {
         let operator = Address::generate(&env);
-        CampaignContract::bump_storage(env.clone(), operator);
+        CampaignContract::bump_storage_as_operator(env.clone(), operator);
     });
 }
 
 #[test]
-fn test_bump_storage_succeeds_for_authorized_operator() {
+fn test_bump_storage_as_operator_succeeds_for_authorized_operator() {
     let env = make_env();
     env.mock_all_auths();
     with_contract(&env, || {
@@ -1176,7 +1181,7 @@ fn test_bump_storage_succeeds_for_authorized_operator() {
         assert!(crate::storage::is_operator(&env, &operator));
 
         // Should not panic: operator is authorized.
-        CampaignContract::bump_storage(env.clone(), operator);
+        CampaignContract::bump_storage_as_operator(env.clone(), operator);
     });
 }
 
@@ -1193,10 +1198,10 @@ fn test_add_operator_fails_not_initialized() {
 
 #[test]
 #[should_panic(expected = "HostError")]
-fn test_bump_storage_requires_auth() {
+fn test_bump_storage_as_operator_requires_auth() {
     let env = make_env();
     with_contract(&env, || {
         let operator = Address::generate(&env);
-        CampaignContract::bump_storage(env.clone(), operator);
+        CampaignContract::bump_storage_as_operator(env.clone(), operator);
     });
 }

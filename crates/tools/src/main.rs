@@ -193,7 +193,9 @@ fn print_available_commands() {
     println!("  signing <cmd>         - Build donation/campaign/custom signing requests");
     println!("  response <cmd>        - Process/validate/save signed wallet responses");
     println!("  deploy [net] [--wasm P] [--force] - Deploy the core contract (Rust mirror of scripts/deploy.sh)");
-    println!("  bump-storage          - Invoke the operator-only bump_storage entrypoint");
+    println!(
+        "  bump-storage          - Invoke the operator-only bump_storage_as_operator entrypoint"
+    );
     println!();
     println!("Stubs (no-op placeholders, do not rely on in production):");
     println!("  invoke <method>       - Stub. Use `stellar contract invoke` natively.");
@@ -973,7 +975,7 @@ fn handle_response(args: &[String]) -> Result<()> {
     Ok(())
 }
 
-/// Issue #57 — invoke the operator-only `bump_storage` entrypoint against a
+/// Issue #57 — invoke the operator-only `bump_storage_as_operator` entrypoint against a
 /// deployed campaign contract, refreshing TTLs to prevent storage archival
 /// on long-running campaigns.
 ///
