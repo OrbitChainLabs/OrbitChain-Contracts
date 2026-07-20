@@ -34,7 +34,6 @@ impl SecureVault {
     }
 
     /// Validate that required keys are present for mainnet operations.
-    #[must_use]
     pub fn validate_for_mainnet(&self) -> Result<()> {
         if self.admin_secret_key.is_none() {
             anyhow::bail!("SOROBAN_ADMIN_SECRET_KEY is required for mainnet operations");
