@@ -27,9 +27,9 @@ pub mod views;
 use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, String, Vec};
 use storage::{
     acquire_lock, get_campaign, get_donor, get_donor_asset_donation, get_milestone,
-    increment_donor_asset_donation, is_frozen, release_lock, set_campaign, set_donor, set_frozen,
-    set_milestone, storage_get_donation_count, storage_get_release_count, storage_get_total_raised,
-    storage_get_unique_donor_count, storage_increment_asset_raised,
+    get_wrapped_native_xlm, increment_donor_asset_donation, is_frozen, release_lock, set_campaign,
+    set_donor, set_frozen, set_milestone, storage_get_donation_count, storage_get_release_count,
+    storage_get_total_raised, storage_get_unique_donor_count, storage_increment_asset_raised,
     storage_increment_donation_count, storage_increment_unique_donor_count,
     storage_set_total_raised,
 };
@@ -124,6 +124,9 @@ impl CampaignContract {
         };
 
         set_campaign(&env, &campaign);
+
+        // Issue #105 – resolve Native → wrapped XLM once and cache for the donate hot path.
+        contract::resolve_and_cache_wrapped_native_xlm(&env, &accepted_assets);
 
         for (index, milestone) in milestones.iter().enumerate() {
             set_milestone(&env, index as u32, &milestone);
@@ -422,7 +425,11 @@ impl CampaignContract {
                 for asset in campaign.accepted_assets.iter() {
                     let asset_address = match &asset.issuer {
                         Some(addr) => addr.clone(),
-                        None => continue, // Skip assets without an issuer (native XLM handled separately)
+                        // Issue #105 – native XLM (issuer: None) uses the cached wrapped SAC.
+                        None => match get_wrapped_native_xlm(&env) {
+                            Some(addr) => addr,
+                            None => continue,
+                        },
                     };
 
                     // Get amount donor contributed in this asset
@@ -630,6 +637,9 @@ fn require_creator(env: &Env) {
 
 /// Validates that `asset` is in the campaign's accepted list and returns the
 /// token contract address needed to construct a `token::Client`.
+///
+/// For `AssetInfo::Native`, reads the wrapped-XLM address cached at initialize
+/// (issue #105) instead of linearly scanning `accepted_assets`.
 fn get_token_address_for_asset(env: &Env, asset: &AssetInfo, campaign: &CampaignData) -> Address {
     match asset {
         AssetInfo::Stellar(addr) => {
@@ -642,16 +652,8 @@ fn get_token_address_for_asset(env: &Env, asset: &AssetInfo, campaign: &Campaign
             }
             addr.clone()
         }
-        AssetInfo::Native => {
-            // Find the XLM entry in accepted_assets by asset_code == "XLM".
-            let xlm_code = soroban_sdk::String::from_str(env, "XLM");
-            campaign
-                .accepted_assets
-                .iter()
-                .find(|a| a.asset_code == xlm_code)
-                .and_then(|a| a.issuer.clone())
-                .unwrap_or_else(|| panic_with_error(env, Error::AssetNotAccepted))
-        }
+        AssetInfo::Native => get_wrapped_native_xlm(env)
+            .unwrap_or_else(|| panic_with_error(env, Error::AssetNotAccepted)),
     }
 }
 
@@ -809,6 +811,7 @@ mod test {
     pub mod negative_path_tests;
     pub mod refund_eligibility_tests;
     pub mod release_milestone_tests;
+    pub mod wrapped_native_xlm_tests;
 
     /// Shared helper: register the contract and run the body inside
     /// `env.as_contract()` so storage, ledger, and auth work correctly.

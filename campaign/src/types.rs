@@ -302,6 +302,10 @@ pub enum DataKey {
     ReentrancyLock,
     /// Freeze flag; present and true = contract is frozen, mutating ops blocked.
     Frozen,
+    /// Cached SEP-41 contract address for wrapped native XLM.
+    /// Resolved once at `initialize` so the donate hot path avoids scanning
+    /// `accepted_assets` for `asset_code == "XLM"`.
+    WrappedNativeXlm,
 }
 
 // ─── Asset types ──────────────────────────────────────────────────────────────
@@ -339,8 +343,8 @@ impl StellarAsset {
 
 /// Donation asset selector passed by the donor at call time.
 ///
-/// `Native` — XLM; the contract resolves the wrapped XLM token address
-///            from the `accepted_assets` list.
+/// `Native` — XLM; the contract uses the wrapped XLM token address cached
+///            under `DataKey::WrappedNativeXlm` at initialize.
 /// `Stellar(addr)` — `addr` is the SEP-41 token contract address directly.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
