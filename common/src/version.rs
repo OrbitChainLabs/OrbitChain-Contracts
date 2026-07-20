@@ -33,6 +33,18 @@ pub const DEPRECATION_LIFESPAN_MINORS: u32 = 3;
 mod tests {
     //! Regression tests for the version policy + CHANGELOG bookkeeping.
 
+    // The `common` crate is `#![no_std]`, but `cargo test` re-links `std`
+    // at the crate root via `extern crate std;` in `lib.rs`. From this
+    // module's scope we reach `std` by path, but the crate prelude is not
+    // auto-pulled into nested modules — import the symbols we actually use.
+    //
+    // `VERSION_*` constants live in the parent module; child modules do not
+    // inherit them by short name, so pull them in explicitly via
+    // `use super::…`.
+    use super::{VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH, VERSION_STR};
+    use std::string::String;
+    use std::vec::Vec;
+
     /// Source of `CHANGELOG.md` at compile-time. The path is relative to this
     /// file's location, so it resolves to `<workspace-root>/CHANGELOG.md`
     /// because this file lives at `common/src/version.rs`.
@@ -45,14 +57,12 @@ mod tests {
     /// grepping the codebase would pick up internal-only annotations and
     /// conditional `#[deprecated]` branches that the CHANGELOG policy does
     /// not need to track.
-    const KNOWN_DEPRECATED_SYMBOLS: &[DeprecatedSymbol] = &[
-        DeprecatedSymbol {
-            crate_name: "orbitchain-campaign",
-            qualified_symbol: "CampaignContract::legacy_version_marker",
-            since: "0.2.0",
-            planned_removal: "0.4.0",
-        },
-    ];
+    const KNOWN_DEPRECATED_SYMBOLS: &[DeprecatedSymbol] = &[DeprecatedSymbol {
+        crate_name: "orbitchain-campaign",
+        qualified_symbol: "CampaignContract::legacy_version_marker",
+        since: "0.2.0",
+        planned_removal: "0.4.0",
+    }];
 
     /// A single entry in the curated deprecation table.
     struct DeprecatedSymbol {
@@ -97,17 +107,29 @@ mod tests {
     /// annotation without updating CHANGELOG.md.
     #[test]
     fn changelog_lists_all_deprecated_symbols() {
-        let mut missing_deprecated: Vec<&'static str> = Vec::new();
-        let mut missing_planned_removal: Vec<&'static str> = Vec::new();
+        // `Vec<String>` rather than `Vec<&'static str>`: the qualified
+        // symbol is built at runtime from `KNOWN_DEPRECATED_SYMBOLS` and
+        // therefore cannot borrow from a `'static` storage class.
+        // Panic-messages take `&String` (auto-deref to `&str`) so this
+        // change is purely the storage type.
+        let mut missing_deprecated: Vec<String> = Vec::new();
+        let mut missing_planned_removal: Vec<String> = Vec::new();
 
         for sym in KNOWN_DEPRECATED_SYMBOLS {
-            let fully_qualified = format!("{}::{}", sym.crate_name, sym.qualified_symbol);
+            // `cargo test` re-links `std` at the crate root via
+            // `#[cfg(test)] extern crate std;` in `lib.rs`, but the std
+            // prelude's `format!` macro isn't auto-pulled into nested
+            // modules. Build the qualified-name string via `String::push_str`
+            // instead — same outcome, no macro dependency.
+            let mut fully_qualified = String::new();
+            fully_qualified.push_str(sym.crate_name);
+            fully_qualified.push_str("::");
+            fully_qualified.push_str(sym.qualified_symbol);
 
             // The "Deprecated" subsection of "## [Unreleased]" must mention
             // every deprecated symbol AND its `since` version.
             if !changelog_mentions(CHANGELOG_MD, &fully_qualified)
-                || !changelog_unreleased_section(CHANGELOG_MD, "### Deprecated")
-                    .contains(sym.since)
+                || !changelog_unreleased_section(CHANGELOG_MD, "### Deprecated").contains(sym.since)
             {
                 missing_deprecated.push(fully_qualified.clone());
             }
@@ -165,9 +187,9 @@ mod tests {
             .find("## [Unreleased]")
             .expect("CHANGELOG.md is missing `## [Unreleased]` — fix the test fixture");
         let after_unreleased = &text[start_unreleased..];
-        let start_sub = after_unreleased
-            .find(subheading)
-            .unwrap_or_else(|| panic!("CHANGELOG.md is missing `## [Unreleased]` -> `{subheading}`"));
+        let start_sub = after_unreleased.find(subheading).unwrap_or_else(|| {
+            panic!("CHANGELOG.md is missing `## [Unreleased]` -> `{subheading}`")
+        });
         let body_start = start_sub + subheading.len();
         let after_sub = &after_unreleased[body_start..];
         let end = after_sub

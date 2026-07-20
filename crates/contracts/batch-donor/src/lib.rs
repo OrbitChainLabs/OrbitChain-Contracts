@@ -48,9 +48,7 @@ mod batch;
 mod types;
 
 pub use batch::MAX_BATCH_SIZE;
-pub use types::{
-    validation_code, AssetInfo, BatchDonateOutcome, BatchDonateResult, DonateTarget,
-};
+pub use types::{validation_code, AssetInfo, BatchDonateOutcome, BatchDonateResult, DonateTarget};
 
 #[cfg(test)]
 mod tests;

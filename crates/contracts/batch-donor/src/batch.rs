@@ -15,7 +15,7 @@
 //!   `ValidationFailed`, or `InvocationFailed`. A failure of one target does
 //!   NOT revert successes prior to it.
 
-use soroban_sdk::{symbol_short, vec, Address, Env, IntoVal, Symbol, Val, Vec};
+use soroban_sdk::{symbol_short, vec, Env, IntoVal, Symbol, Val, Vec};
 
 use crate::types::{
     validation_code, AssetInfo, BatchDonateOutcome, BatchDonateResult, DonateTarget,
@@ -67,20 +67,27 @@ pub fn batch_donate_atomic(env: &Env, targets: &Vec<DonateTarget>) -> Vec<BatchD
 /// runtime failure is reported as `InvocationFailed`. Successes prior to a
 /// failure still commit (this is the entire point of the
 /// `continue_on_error` variant).
-pub fn batch_donate_best_effort(
-    env: &Env,
-    targets: &Vec<DonateTarget>,
-) -> Vec<BatchDonateResult> {
+pub fn batch_donate_best_effort(env: &Env, targets: &Vec<DonateTarget>) -> Vec<BatchDonateResult> {
     // Validation IS still pre-flight and uniform — passing partial-validation
     // would be a footgun for callers, and atomicity mismatch between methods
     // is exactly what the explicit method-name separation is here to avoid.
     let pre = pre_validate_collect(env, targets);
 
     let mut results: Vec<BatchDonateResult> = Vec::new(env);
+    // `enumerate()` yields `usize`; convert once per loop. The converted
+    // value fits in `u32` because `targets` is bounded by `MAX_BATCH_SIZE`
+    // (= 50) in `pre_validate_collect`, so `index <= MAX_BATCH_SIZE - 1`
+    // always holds. Use a wrap-safe cast to keep the 1-to-1 indexing
+    // invariant intact under future growth of the cap.
+    let to_u32 = |i: usize| u32::try_from(i).expect("batch index fits in u32");
     for (index, target) in targets.iter().enumerate() {
-        if let Some(code) = pre[index as usize] {
+        let idx = to_u32(index);
+        // Soroban `Vec<T>::get(u32) -> Option<T>`; `pre: Vec<Option<u32>>`
+        // so the outer Option is "index in range", the inner Option is the
+        // per-target validation code.
+        if let Some(Some(code)) = pre.get(idx) {
             results.push_back(BatchDonateResult {
-                index,
+                index: idx,
                 outcome: BatchDonateOutcome::ValidationFailed(code),
                 validation_code: Some(code),
             });
@@ -89,12 +96,12 @@ pub fn batch_donate_best_effort(
 
         match try_invoke_campaign_donate(env, &target) {
             Ok(()) => results.push_back(BatchDonateResult {
-                index,
+                index: idx,
                 outcome: BatchDonateOutcome::Success,
                 validation_code: None,
             }),
             Err(()) => results.push_back(BatchDonateResult {
-                index,
+                index: idx,
                 outcome: BatchDonateOutcome::InvocationFailed,
                 validation_code: None,
             }),
@@ -177,13 +184,33 @@ fn invoke_campaign_donate(env: &Env, target: &DonateTarget) {
 /// for ANY host error (panic, contract error code, malformed args, etc.) so
 /// the caller sees a uniform "InvocationFailed" — the exact reason is opaque
 /// on purpose; surface-only per-target outcomes are the contract's API.
+///
+/// The campaign contract's `donate(env, donor, amount, asset)` returns `()`,
+/// so the call's success type is `()` and the contract-error type is
+/// `soroban_sdk::Error` (the catch-all contract panic codec). The outer
+/// `Result` from `try_invoke_contract` is the host-level
+/// `InvokeError` / `ConversionError` envelope; the inner `Result` is the
+/// contract's own success/panic outcome.
 fn try_invoke_campaign_donate(env: &Env, target: &DonateTarget) -> Result<(), ()> {
     let args = build_donate_args(env, target);
-    let res: Result<Val, soroban_sdk::InvokeError> =
-        env.try_invoke_contract::<Val>(&target.campaign, &CAMPAIGN_DONATE_FN, args);
+    // soroban-sdk 26.x signature:
+    //   fn try_invoke_contract<T: TryFromVal<Env, Val>, E: ...>(
+    //       &self, contract: &Address, func: &Symbol, args: Vec<Val>,
+    //   ) -> Result<Result<T, ConversionError>, Result<E, InvokeError>>
+    //
+    // The four outcomes collapse uniformly for our surface-only API:
+    //   Ok(Ok(()))   — contract returned () cleanly           \u2192 Ok(())
+    //   Ok(Err(_))   — host failed to convert Val to T         \u2192 Err(())
+    //   Err(Ok(_))   — contract panicked with type E          \u2192 Err(())
+    //   Err(Err(_))  — host invocation error                  \u2192 Err(())
+    let res = env.try_invoke_contract::<(), soroban_sdk::Error>(
+        &target.campaign,
+        &CAMPAIGN_DONATE_FN,
+        args,
+    );
     match res {
-        Ok(_) => Ok(()),
-        Err(_) => Err(()),
+        Ok(Ok(())) => Ok(()),
+        _ => Err(()),
     }
 }
 

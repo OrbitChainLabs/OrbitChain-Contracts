@@ -24,8 +24,14 @@ fn entrypoints_basic() {
     let client = BatchDonorContractClient::new(&env, &contract_id);
 
     // No auth needed for read-only entrypoints.
-    assert_eq!(client.hello(), soroban_sdk::Symbol::new(&env, "batch_donor"));
-    assert_eq!(client.version_str(), soroban_sdk::String::from_str(&env, "0.1.0"));
+    assert_eq!(
+        client.hello(),
+        soroban_sdk::Symbol::new(&env, "batch_donor")
+    );
+    assert_eq!(
+        client.version_str(),
+        soroban_sdk::String::from_str(&env, "0.1.0")
+    );
     assert_eq!(client.max_batch_size(), 50);
     // Legacy integer version view mirrors VERSION_MINOR (= 1).
     assert_eq!(client.version(), 1u32);
@@ -126,5 +132,8 @@ fn workspace_version_string_is_known() {
     let client = BatchDonorContractClient::new(&env, &contract_id);
     // Lock the contract version string so accidental regulator bumps cause
     // a loud failure rather than a silent shipping of an out-of-sync WASM.
-    assert_eq!(client.version_str(), soroban_sdk::String::from_str(&env, "0.1.0"));
+    assert_eq!(
+        client.version_str(),
+        soroban_sdk::String::from_str(&env, "0.1.0")
+    );
 }
