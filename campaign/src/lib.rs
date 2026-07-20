@@ -26,12 +26,13 @@ pub mod views;
 
 use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, String, Vec};
 use storage::{
-    acquire_lock, bump_all_persistent, get_campaign, get_donor, get_donor_asset_donation,
-    get_milestone, increment_donor_asset_donation, is_frozen, release_lock, set_campaign,
-    set_donor, set_frozen, set_milestone, storage_get_donation_count, storage_get_release_count,
-    storage_get_total_raised, storage_get_unique_donor_count, storage_increment_asset_raised,
+    acquire_lock, block_asset, bump_all_persistent, get_campaign, get_donor,
+    get_donor_asset_donation, get_milestone, increment_donor_asset_donation, is_asset_blocked,
+    is_frozen, release_lock, set_campaign, set_donor, set_frozen, set_milestone,
+    storage_get_donation_count, storage_get_release_count, storage_get_total_raised,
+    storage_get_unique_donor_count, storage_increment_asset_raised,
     storage_increment_donation_count, storage_increment_unique_donor_count,
-    storage_set_total_raised, unlock_milestones_batch,
+    storage_set_total_raised, unblock_asset, unlock_milestones_batch,
 };
 
 use types::{
@@ -214,8 +215,12 @@ impl CampaignContract {
             .unwrap_or_else(|| panic_with_error(&env, Error::Overflow));
         storage_set_total_raised(&env, new_total);
 
-        // Track per-asset donation for pro-rata refund calculation
+        // Issue #90 – check per-asset block before processing donation
         let asset_address = get_token_address_for_asset(&env, &asset, &campaign);
+        if is_asset_blocked(&env, &asset_address) {
+            panic_with_error(&env, Error::AssetBlocked);
+        }
+
         storage_increment_asset_raised(&env, &asset_address, amount);
         increment_donor_asset_donation(&env, &donor, &asset_address, amount);
 
@@ -669,6 +674,54 @@ impl CampaignContract {
 
         let timestamp = env.ledger().timestamp();
         event::contract_unfrozen(&env, &campaign.creator, timestamp);
+    }
+
+    /// Issue #90 – Block an asset, preventing any new donations in that token.
+    ///
+    /// Only the admin (creator) can call this.
+    /// Donations in a blocked asset panic with `Error::AssetBlocked`.
+    /// All other assets continue to function while one is blocked.
+    ///
+    /// # Panics
+    /// - `Error::Unauthorized` if not called by the creator
+    /// - `Error::NotInitialized` if campaign not yet initialized
+    pub fn block_asset(env: Env, asset: Address) {
+        let campaign =
+            get_campaign(&env).unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
+
+        campaign.creator.require_auth();
+
+        block_asset(&env, &asset);
+
+        let timestamp = env.ledger().timestamp();
+        event::asset_blocked(&env, &campaign.creator, &asset, timestamp);
+    }
+
+    /// Issue #90 – Unblock an asset, re-enabling donations in that token.
+    ///
+    /// Only the admin (creator) can call this.
+    ///
+    /// # Panics
+    /// - `Error::Unauthorized` if not called by the creator
+    /// - `Error::NotInitialized` if campaign not yet initialized
+    pub fn unblock_asset(env: Env, asset: Address) {
+        let campaign =
+            get_campaign(&env).unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
+
+        campaign.creator.require_auth();
+
+        unblock_asset(&env, &asset);
+
+        let timestamp = env.ledger().timestamp();
+        event::asset_unblocked(&env, &campaign.creator, &asset, timestamp);
+    }
+
+    /// Issue #90 – Check whether a specific asset is blocked.
+    ///
+    /// No auth required (read-only view).
+    /// Returns `false` if the flag has never been set for this asset.
+    pub fn is_asset_blocked_view(env: Env, asset: Address) -> bool {
+        is_asset_blocked(&env, &asset)
     }
 }
 

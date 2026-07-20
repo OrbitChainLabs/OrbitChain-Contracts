@@ -38,3 +38,37 @@ High-priority security areas for this project:
 - Incorrect access control on contract invocations
 
 Thank you for helping keep OrbitChain and its users safe.
+
+---
+
+## Operational Playbook: Emergency Circuit Breaker
+
+### Per-Asset Block List
+
+The contract supports per-asset blocking as a graded incident response mechanism.
+This allows an admin to halt donations in a specific asset without freezing the
+entire campaign.
+
+### Admin Functions
+
+- **`block_asset(asset: Address)`** — Blocks donations in the specified token contract address.
+  Only callable by the campaign creator/admin. Emits `asset_blocked` event.
+- **`unblock_asset(asset: Address)`** — Unblocks donations in the specified token contract address.
+  Only callable by the campaign creator/admin. Emits `asset_unblocked` event.
+- **`is_asset_blocked_view(asset: Address) -> bool`** — Public view function; no auth required.
+
+### Behaviour
+
+- Donations in a blocked asset panic with `Error::AssetBlocked` (error code 90).
+- All other assets continue to function normally while one is blocked.
+- The block list is stored in persistent storage and survives across ledger cycles.
+- The global freeze flag (`freeze`/`unfreeze`) still blocks all mutating operations
+  regardless of per-asset block status.
+
+### Recommended Incident Response Flow
+
+1. **Detect** anomalous activity in a specific asset (e.g., suspected hot-wallet compromise).
+2. **Block** the affected asset via `block_asset(asset)` — other assets remain operational.
+3. **Investigate** off-chain while donations continue in unblocked assets.
+4. **Resolve** by calling `unblock_asset(asset)` once the issue is contained.
+5. If the entire contract must be halted, use `freeze()` (global freeze) instead.

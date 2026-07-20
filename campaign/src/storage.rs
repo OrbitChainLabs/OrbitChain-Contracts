@@ -459,6 +459,35 @@ pub fn set_frozen(env: &Env, frozen: bool) {
     bump_persistent(env, &key);
 }
 
+// ─── Asset block list ─────────────────────────────────────────────────────────
+//
+// Issue #90 — emergency circuit breaker: allows admin to block specific assets
+// without freezing the entire contract. Block list is persistent so it survives
+// across ledger cycles.
+
+/// Check whether a specific asset is blocked by the admin.
+/// Returns `false` if the flag has never been set.
+pub fn is_asset_blocked(env: &Env, asset: &Address) -> bool {
+    let key = DataKey::BlockedAsset(asset.clone());
+    let blocked: bool = env.storage().persistent().get(&key).unwrap_or(false);
+    bump_persistent(env, &key);
+    blocked
+}
+
+/// Block an asset, preventing any new donations in that token.
+pub fn block_asset(env: &Env, asset: &Address) {
+    let key = DataKey::BlockedAsset(asset.clone());
+    env.storage().persistent().set(&key, &true);
+    bump_persistent(env, &key);
+}
+
+/// Unblock an asset, re-enabling donations in that token.
+pub fn unblock_asset(env: &Env, asset: &Address) {
+    let key = DataKey::BlockedAsset(asset.clone());
+    env.storage().persistent().set(&key, &false);
+    bump_persistent(env, &key);
+}
+
 // ─── Bulk TTL refresh ─────────────────────────────────────────────────────────
 
 /// Refresh TTL for all core persistent keys in a single call.
