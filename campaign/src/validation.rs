@@ -12,11 +12,10 @@ use crate::types::{
 };
 use crate::REFUND_WINDOW;
 
+#[allow(dead_code)]
 /// Issue #175 – assert the current invoker is the campaign creator.
 pub(crate) fn require_creator(env: &Env) {
-    let campaign = get_campaign(env).unwrap_or_else(|| {
-        env.panic_with_error(Error::Unauthorized)
-    });
+    let campaign = get_campaign(env).unwrap_or_else(|| env.panic_with_error(Error::Unauthorized));
     campaign.creator.require_auth();
 }
 
@@ -110,6 +109,7 @@ pub(crate) fn validate_campaign_transition(
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn validate_milestone_transition(
     _env: &Env,
     current_status: &MilestoneStatus,
