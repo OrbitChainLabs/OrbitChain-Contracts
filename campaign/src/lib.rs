@@ -46,6 +46,14 @@ pub const VERSION: u32 = 1;
 /// Refunds are only permitted within this window after campaign end or cancellation.
 pub const REFUND_WINDOW: u64 = 30 * 24 * 60 * 60;
 
+// Re-export the workspace semver constants so the campaign contract exposes
+// them through its own `pub use` surface.  The legacy `VERSION: u32` constant
+// above is preserved for backwards compatibility with pre-0.2 callers — new
+// code should prefer the workspace constants in `common::version`.
+pub use common::version::{
+    DEPRECATION_LIFESPAN_MINORS, VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH, VERSION_STR,
+};
+
 /// Maximum amount of ledger time a campaign deadline may be extended.
 ///
 /// Capping extensions at ten years keeps deadline arithmetic meaningful for
@@ -338,8 +346,50 @@ impl CampaignContract {
         soroban_sdk::Symbol::new(&env, "campaign")
     }
 
+    /// Legacy integer version view.
+    ///
+    /// Returns the legacy `campaign::VERSION` constant. Bumped at every
+    /// (minor or major) workspace release alongside `common::version::VERSION_STR`.
+    /// New callers should prefer [`Self::version_str`] which returns the
+    /// workspace semver string.
     pub fn version() -> u32 {
         VERSION
+    }
+
+    /// Returns the workspace semver string for this contract (e.g. `"0.1.0"`).
+    ///
+    /// Backed by [`common::version::VERSION_STR`] — the canonical source of
+    /// truth defined in `PROCESS.md` § "Version-bump rules". This entrypoint is
+    /// stable contract API and will not be renamed or removed without a major
+    /// version bump.
+    pub fn version_str(env: Env) -> soroban_sdk::String {
+        soroban_sdk::String::from_str(&env, VERSION_STR)
+    }
+
+    /// Example deprecated entrypoint. Required by issue #151 to demonstrate
+    /// the project-wide `#[deprecated(since = "X.Y.Z", note = "...")]`
+    /// attribute pattern documented in `PROCESS.md` and `docs/versioning.md`.
+    ///
+    /// `cargo doc` renders this symbol with a strikethrough and an inline note
+    /// pointing at `CampaignContract::version_str()` and
+    /// `common::version::VERSION_STR`. The companion test
+    /// `common::version::tests::changelog_lists_all_deprecated_symbols`
+    /// enforces that every such annotation is mirrored in `CHANGELOG.md`.
+    ///
+    /// Deprecation timeline (per `PROCESS.md`): deprecated in 0.2.0; removal
+    /// scheduled for 0.4.0 (three minors after introduction).
+    #[deprecated(
+        since = "0.2.0",
+        note = "use CampaignContract::version_str() or common::version::VERSION_STR; will be removed in 0.4.0"
+    )]
+    #[allow(dead_code)]
+    pub fn legacy_version_marker(env: Env) -> soroban_sdk::Symbol {
+        // Kept as a frozen placeholder so the symbol remains present in the WASM
+        // build (and thus in `cargo doc`) until 0.4.0. After removal the
+        // CHANGELOG test must fail loudly if a remaining `#[deprecated]`
+        // annotation goes unreferenced.
+        let _ = env;
+        soroban_sdk::Symbol::new(&env, "v0.1.0")
     }
 
     /// Check if a donor is eligible to claim a refund.

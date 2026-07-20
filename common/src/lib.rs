@@ -12,6 +12,13 @@
 #![no_std]
 use soroban_sdk::contracttype;
 
+/// Workspace semver constants and deprecation-tracking tests.
+/// See [`PROCESS.md`] and [`docs/versioning.md`] for the policy.
+///
+/// [`PROCESS.md`]: https://github.com/OrbitChainLabs/OrbitChain-Contracts/blob/main/PROCESS.md
+/// [`docs/versioning.md`]: https://github.com/OrbitChainLabs/OrbitChain-Contracts/blob/main/docs/versioning.md
+pub mod version;
+
 #[contracttype]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum CampaignStatus {
