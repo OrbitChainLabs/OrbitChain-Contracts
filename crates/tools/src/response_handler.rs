@@ -3,8 +3,8 @@
 //! Parses wallet signing responses, validates signed transactions,
 //! and persists/loads them from JSON files for later submission.
 
-use anyhow::{Result, Context, anyhow};
-use serde::{Serialize, Deserialize};
+use anyhow::{anyhow, Context, Result};
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::fs;
 
@@ -48,11 +48,9 @@ pub struct ResponseHandler;
 
 impl ResponseHandler {
     /// Parse signed transaction from JSON response.
-    #[must_use]
     pub fn parse_response(response_json: &str) -> Result<SignedTransaction> {
         let parsed: serde_json::Value =
-            serde_json::from_str(response_json)
-                .context("Failed to parse response JSON")?;
+            serde_json::from_str(response_json).context("Failed to parse response JSON")?;
 
         Ok(SignedTransaction {
             request_id: parsed["requestId"]
@@ -66,16 +64,12 @@ impl ResponseHandler {
             signed_at: parsed["signedAt"]
                 .as_u64()
                 .unwrap_or_else(|| chrono::Local::now().timestamp() as u64),
-            signer: parsed["signer"]
-                .as_str()
-                .unwrap_or("unknown")
-                .to_string(),
+            signer: parsed["signer"].as_str().unwrap_or("unknown").to_string(),
             status: TransactionStatus::Signed,
         })
     }
 
     /// Validate a signed transaction.
-    #[must_use]
     pub fn validate(tx: &SignedTransaction) -> Result<()> {
         if tx.request_id.is_empty() {
             return Err(anyhow!("Request ID cannot be empty"));
@@ -93,25 +87,20 @@ impl ResponseHandler {
     }
 
     /// Save signed transaction to file.
-    #[must_use]
     pub fn save_to_file(tx: &SignedTransaction, path: &str) -> Result<()> {
-        let json = serde_json::to_string_pretty(tx)
-            .context("Failed to serialize transaction")?;
+        let json = serde_json::to_string_pretty(tx).context("Failed to serialize transaction")?;
 
-        fs::write(path, json)
-            .context(format!("Failed to write transaction to {}", path))?;
+        fs::write(path, json).context(format!("Failed to write transaction to {}", path))?;
 
         Ok(())
     }
 
     /// Load signed transaction from file.
-    #[must_use]
     pub fn load_from_file(path: &str) -> Result<SignedTransaction> {
         let content = fs::read_to_string(path)
             .context(format!("Failed to read transaction from {}", path))?;
 
-        serde_json::from_str(&content)
-            .context("Failed to deserialize transaction")
+        serde_json::from_str(&content).context("Failed to deserialize transaction")
     }
 
     /// Process wallet response and return signed transaction
@@ -171,8 +160,7 @@ impl ProcessedResponse {
 
     /// Export as JSON
     pub fn to_json(&self) -> Result<String> {
-        serde_json::to_string_pretty(self)
-            .context("Failed to serialize response")
+        serde_json::to_string_pretty(self).context("Failed to serialize response")
     }
 }
 
@@ -216,11 +204,7 @@ pub struct ResponseBuilder;
 
 impl ResponseBuilder {
     /// Create a test response JSON
-    pub fn build_response(
-        request_id: String,
-        xdr: String,
-        signer: String,
-    ) -> String {
+    pub fn build_response(request_id: String, xdr: String, signer: String) -> String {
         json!({
             "requestId": request_id,
             "xdr": xdr,
@@ -255,9 +239,10 @@ mod tests {
         let response = json!({
             "requestId": "req_123",
             "xdr": "AAAAAA==test",
-            "signer": "GBJCHUKZMTFSLOMNC2P4TS4VJJBTCYL3SDKW3KSMSGQUZ6EFLXVX77JVH",
+            "signer": "GAMX62ZD4FWIKMWGVPEDR6WNL2TYTPQMO2ZJEAZUAON7VCZ5G2GWDF7W",
             "signedAt": 1234567890
-        }).to_string();
+        })
+        .to_string();
 
         let result = ResponseHandler::parse_response(&response);
         assert!(result.is_ok());
@@ -273,7 +258,7 @@ mod tests {
             request_id: "req_123".to_string(),
             transaction_xdr: "AAAAAA==".to_string(),
             signed_at: 0,
-            signer: "GBJCHUKZMTFSLOMNC2P4TS4VJJBTCYL3SDKW3KSMSGQUZ6EFLXVX77JVH".to_string(),
+            signer: "GAMX62ZD4FWIKMWGVPEDR6WNL2TYTPQMO2ZJEAZUAON7VCZ5G2GWDF7W".to_string(),
             status: TransactionStatus::Signed,
         };
 
@@ -287,7 +272,7 @@ mod tests {
                 request_id: "req_123".to_string(),
                 transaction_xdr: "AAAAAA==".to_string(),
                 signed_at: 0,
-                signer: "GBJCHUKZMTFSLOMNC2P4TS4VJJBTCYL3SDKW3KSMSGQUZ6EFLXVX77JVH".to_string(),
+                signer: "GAMX62ZD4FWIKMWGVPEDR6WNL2TYTPQMO2ZJEAZUAON7VCZ5G2GWDF7W".to_string(),
                 status: TransactionStatus::Signed,
             },
             validation_errors: vec![],
@@ -302,7 +287,7 @@ mod tests {
         let response = ResponseBuilder::build_response(
             "req_123".to_string(),
             "AAAAAA==test".to_string(),
-            "GBJCHUKZMTFSLOMNC2P4TS4VJJBTCYL3SDKW3KSMSGQUZ6EFLXVX77JVH".to_string(),
+            "GAMX62ZD4FWIKMWGVPEDR6WNL2TYTPQMO2ZJEAZUAON7VCZ5G2GWDF7W".to_string(),
         );
 
         assert!(response.contains("req_123"));

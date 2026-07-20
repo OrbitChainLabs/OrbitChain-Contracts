@@ -10,7 +10,22 @@
 //! reference core contract keeps its separate `CoreError` until it is retired.
 
 #![no_std]
+// Re-link `std` only under `cargo test` so the `#[cfg(test)]` modules in
+// `version::tests` (and any future sibling) can use `Vec`, `format!`,
+// `assert!`, etc. Per no_std crate convention the `extern crate std;`
+// must live at the crate root to re-establish the std crate's
+// presence in the test target, since `#![no_std]` excludes it from the
+// normal prelude.
+#[cfg(test)]
+extern crate std;
 use soroban_sdk::contracttype;
+
+/// Workspace semver constants and deprecation-tracking tests.
+/// See [`PROCESS.md`] and [`docs/versioning.md`] for the policy.
+///
+/// [`PROCESS.md`]: https://github.com/OrbitChainLabs/OrbitChain-Contracts/blob/main/PROCESS.md
+/// [`docs/versioning.md`]: https://github.com/OrbitChainLabs/OrbitChain-Contracts/blob/main/docs/versioning.md
+pub mod version;
 
 #[contracttype]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]

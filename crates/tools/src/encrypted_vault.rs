@@ -34,7 +34,6 @@ impl EncryptedVault {
     }
 
     /// Initialize vault with a master password
-    #[must_use]
     pub fn with_password(password: &str) -> Result<Self> {
         let key_manager = KeyManager::from_password(password)?;
         Ok(Self {
@@ -45,7 +44,6 @@ impl EncryptedVault {
     }
 
     /// Initialize vault with a hex-encoded master key
-    #[must_use]
     pub fn with_hex_key(hex_key: &str) -> Result<Self> {
         let key_manager = KeyManager::from_hex_key(hex_key)?;
         Ok(Self {
@@ -56,7 +54,6 @@ impl EncryptedVault {
     }
 
     /// Load vault configuration from .env file
-    #[must_use]
     pub fn from_env() -> Result<Self> {
         dotenv::dotenv().ok();
 
@@ -73,25 +70,32 @@ impl EncryptedVault {
 
         // Load public keys
         if let Ok(admin_pub) = env::var("SOROBAN_ADMIN_PUBLIC_KEY") {
-            vault.public_keys.insert("admin_public_key".to_string(), admin_pub);
+            vault
+                .public_keys
+                .insert("admin_public_key".to_string(), admin_pub);
         }
         if let Ok(issuing_pub) = env::var("SOROBAN_ISSUING_PUBLIC_KEY") {
-            vault.public_keys.insert("issuing_public_key".to_string(), issuing_pub);
+            vault
+                .public_keys
+                .insert("issuing_public_key".to_string(), issuing_pub);
         }
 
         // Load encrypted keys (stored as VAR_NAME_ENCRYPTED=hex:data format)
         if let Ok(admin_enc) = env::var("SOROBAN_ADMIN_SECRET_KEY_ENCRYPTED") {
-            vault.encrypted_keys.insert("admin_secret_key".to_string(), admin_enc);
+            vault
+                .encrypted_keys
+                .insert("admin_secret_key".to_string(), admin_enc);
         }
         if let Ok(issuing_enc) = env::var("SOROBAN_ISSUING_SECRET_KEY_ENCRYPTED") {
-            vault.encrypted_keys.insert("issuing_secret_key".to_string(), issuing_enc);
+            vault
+                .encrypted_keys
+                .insert("issuing_secret_key".to_string(), issuing_enc);
         }
 
         Ok(vault)
     }
 
     /// Store an encrypted secret key in the vault.
-    #[must_use]
     pub fn store_secret_key(&mut self, key_name: &str, secret_key: &str) -> Result<()> {
         // Validate key format
         KeyManager::validate_secret_key(secret_key)?;
@@ -104,13 +108,13 @@ impl EncryptedVault {
         // Encrypt and store
         let key_manager = self.key_manager.as_ref().unwrap();
         let encrypted_hex = key_manager.export_encrypted(secret_key)?;
-        self.encrypted_keys.insert(key_name.to_string(), encrypted_hex);
+        self.encrypted_keys
+            .insert(key_name.to_string(), encrypted_hex);
 
         Ok(())
     }
 
     /// Retrieve and decrypt a secret key from the vault.
-    #[must_use]
     pub fn retrieve_secret_key(&self, key_name: &str) -> Result<String> {
         // Get encrypted key
         let encrypted_hex = self
@@ -130,15 +134,14 @@ impl EncryptedVault {
     }
 
     /// Store a public key (unencrypted).
-    #[must_use]
     pub fn store_public_key(&mut self, key_name: &str, public_key: &str) -> Result<()> {
         KeyManager::validate_public_key(public_key)?;
-        self.public_keys.insert(key_name.to_string(), public_key.to_string());
+        self.public_keys
+            .insert(key_name.to_string(), public_key.to_string());
         Ok(())
     }
 
     /// Retrieve a public key from the vault.
-    #[must_use]
     pub fn retrieve_public_key(&self, key_name: &str) -> Result<String> {
         self.public_keys
             .get(key_name)
@@ -159,7 +162,11 @@ impl EncryptedVault {
 
         content.push_str("\n# Encrypted Secret Keys\n");
         for (name, encrypted) in &self.encrypted_keys {
-            content.push_str(&format!("{}_ENCRYPTED={}\n", name.to_uppercase(), encrypted));
+            content.push_str(&format!(
+                "{}_ENCRYPTED={}\n",
+                name.to_uppercase(),
+                encrypted
+            ));
         }
 
         fs::write(path, content).context("Failed to write vault file")?;
@@ -282,7 +289,7 @@ mod tests {
     #[test]
     fn test_store_and_retrieve_secret_key() -> Result<()> {
         let mut vault = EncryptedVault::with_password("secure_password")?;
-        let secret_key = "SADQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQP54X";
+        let secret_key = "SAVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCVLG5";
 
         vault.store_secret_key("admin_secret_key", secret_key)?;
         let retrieved = vault.retrieve_secret_key("admin_secret_key")?;
@@ -294,7 +301,7 @@ mod tests {
     #[test]
     fn test_store_and_retrieve_public_key() -> Result<()> {
         let mut vault = EncryptedVault::new();
-        let public_key = "GDVEU3DD4KOFECV66VIHWEZOYX4ZKR3WV27L464SIIPOU2IUI3JCZA57";
+        let public_key = "GAMX62ZD4FWIKMWGVPEDR6WNL2TYTPQMO2ZJEAZUAON7VCZ5G2GWDF7W";
 
         vault.store_public_key("admin_public_key", public_key)?;
         let retrieved = vault.retrieve_public_key("admin_public_key")?;
@@ -314,19 +321,31 @@ mod tests {
     #[test]
     fn test_save_and_load_vault() -> Result<()> {
         let temp_path = "/tmp/test_vault.enc";
-        
+
         let mut vault = EncryptedVault::with_password("test_password")?;
-        vault.store_secret_key("admin_secret_key", "SADQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQP54X")?;
-        vault.store_public_key("admin_public_key", "GDVEU3DD4KOFECV66VIHWEZOYX4ZKR3WV27L464SIIPOU2IUI3JCZA57")?;
-        
+        vault.store_secret_key(
+            "admin_secret_key",
+            "SAVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCVLG5",
+        )?;
+        vault.store_public_key(
+            "admin_public_key",
+            "GAMX62ZD4FWIKMWGVPEDR6WNL2TYTPQMO2ZJEAZUAON7VCZ5G2GWDF7W",
+        )?;
+
         vault.save_to_file(temp_path)?;
 
         let loaded_vault = EncryptedVault::load_from_file(temp_path, "test_password")?;
         let secret = loaded_vault.retrieve_secret_key("admin_secret_key")?;
         let public = loaded_vault.retrieve_public_key("admin_public_key")?;
 
-        assert_eq!(secret, "SADQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQP54X");
-        assert_eq!(public, "GDVEU3DD4KOFECV66VIHWEZOYX4ZKR3WV27L464SIIPOU2IUI3JCZA57");
+        assert_eq!(
+            secret,
+            "SAVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCVLG5"
+        );
+        assert_eq!(
+            public,
+            "GAMX62ZD4FWIKMWGVPEDR6WNL2TYTPQMO2ZJEAZUAON7VCZ5G2GWDF7W"
+        );
 
         // Cleanup
         let _ = fs::remove_file(temp_path);
@@ -336,7 +355,10 @@ mod tests {
     #[test]
     fn test_export_to_env_vars() -> Result<()> {
         let mut vault = EncryptedVault::new();
-        vault.store_public_key("admin_public_key", "GDVEU3DD4KOFECV66VIHWEZOYX4ZKR3WV27L464SIIPOU2IUI3JCZA57")?;
+        vault.store_public_key(
+            "admin_public_key",
+            "GAMX62ZD4FWIKMWGVPEDR6WNL2TYTPQMO2ZJEAZUAON7VCZ5G2GWDF7W",
+        )?;
 
         let vars = vault.export_to_env_vars();
         assert!(!vars.is_empty());

@@ -360,83 +360,84 @@
               "key": {
                 "vec": [
                   {
-                    "symbol": "MilestoneData"
-                  },
-                  {
-                    "u32": 0
+                    "symbol": "MilestonesVec"
                   }
                 ]
               },
               "durability": "persistent",
               "val": {
-                "map": [
+                "vec": [
                   {
-                    "key": {
-                      "symbol": "description_hash"
-                    },
-                    "val": {
-                      "bytes": "0101010101010101010101010101010101010101010101010101010101010101"
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "index"
-                    },
-                    "val": {
-                      "u32": 0
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "release_tx"
-                    },
-                    "val": "void"
-                  },
-                  {
-                    "key": {
-                      "symbol": "released_amount"
-                    },
-                    "val": {
-                      "i128": "0"
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "released_at"
-                    },
-                    "val": "void"
-                  },
-                  {
-                    "key": {
-                      "symbol": "released_at_ledger"
-                    },
-                    "val": "void"
-                  },
-                  {
-                    "key": {
-                      "symbol": "released_to"
-                    },
-                    "val": "void"
-                  },
-                  {
-                    "key": {
-                      "symbol": "status"
-                    },
-                    "val": {
-                      "vec": [
-                        {
-                          "symbol": "Locked"
+                    "map": [
+                      {
+                        "key": {
+                          "symbol": "description_hash"
+                        },
+                        "val": {
+                          "bytes": "0101010101010101010101010101010101010101010101010101010101010101"
                         }
-                      ]
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "target_amount"
-                    },
-                    "val": {
-                      "i128": "1000"
-                    }
+                      },
+                      {
+                        "key": {
+                          "symbol": "index"
+                        },
+                        "val": {
+                          "u32": 0
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "release_tx"
+                        },
+                        "val": "void"
+                      },
+                      {
+                        "key": {
+                          "symbol": "released_amount"
+                        },
+                        "val": {
+                          "i128": "0"
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "released_at"
+                        },
+                        "val": "void"
+                      },
+                      {
+                        "key": {
+                          "symbol": "released_at_ledger"
+                        },
+                        "val": "void"
+                      },
+                      {
+                        "key": {
+                          "symbol": "released_to"
+                        },
+                        "val": "void"
+                      },
+                      {
+                        "key": {
+                          "symbol": "status"
+                        },
+                        "val": {
+                          "vec": [
+                            {
+                              "symbol": "Locked"
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "target_amount"
+                        },
+                        "val": {
+                          "i128": "1000"
+                        }
+                      }
+                    ]
                   }
                 ]
               }

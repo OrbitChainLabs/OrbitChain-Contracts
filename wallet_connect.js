@@ -86,11 +86,83 @@
         return sep7TxUri(xdr, callbackUrl);
       },
     },
+    // Desktop browser-extension adapters (issue #142). Uniform interface:
+    // `detect()` — is the extension injected into this page right now?
+    // `connect()` — resolve the user's public key (G…) via the extension's
+    // own approval flow. Each adapter uses the API documented by its vendor;
+    // detection is by injected global, same pattern the Freighter path
+    // always used.
     {
       id: 'freighter',
       name: 'Freighter',
       platforms: ['desktop'],
       icon: '🚀',
+      detect: function () {
+        return typeof global.freighter !== 'undefined';
+      },
+      connect: function () {
+        return Promise.resolve()
+          .then(function () { return global.freighter.isConnected(); })
+          .then(function (connected) {
+            if (!connected) return global.freighter.connect();
+          })
+          .then(function () { return global.freighter.getAddress(); })
+          .then(function (res) { return res.address; });
+      },
+    },
+    {
+      id: 'albedo',
+      name: 'Albedo',
+      platforms: ['desktop'],
+      icon: '🔆',
+      detect: function () {
+        return typeof global.albedo !== 'undefined' && typeof global.albedo.publicKey === 'function';
+      },
+      connect: function () {
+        return global.albedo.publicKey({}).then(function (res) { return res.pubkey; });
+      },
+    },
+    {
+      id: 'rabet',
+      name: 'Rabet',
+      platforms: ['desktop'],
+      icon: '🦊',
+      detect: function () {
+        return typeof global.rabet !== 'undefined' && typeof global.rabet.connect === 'function';
+      },
+      connect: function () {
+        return global.rabet.connect().then(function (res) { return res.publicKey; });
+      },
+    },
+    {
+      id: 'xbull',
+      name: 'xBull',
+      platforms: ['desktop'],
+      icon: '🐂',
+      detect: function () {
+        return typeof global.xBullSDK !== 'undefined';
+      },
+      connect: function () {
+        return global.xBullSDK
+          .connect({ canRequestPublicKey: true, canRequestSign: true })
+          .then(function () { return global.xBullSDK.getPublicKey(); });
+      },
+    },
+    {
+      id: 'lobstr-extension',
+      name: 'LOBSTR Extension',
+      platforms: ['desktop'],
+      icon: '🦞',
+      detect: function () {
+        return typeof global.lobstrApi !== 'undefined' && typeof global.lobstrApi.getPublicKey === 'function';
+      },
+      connect: function () {
+        return Promise.resolve()
+          .then(function () {
+            if (typeof global.lobstrApi.connect === 'function') return global.lobstrApi.connect();
+          })
+          .then(function () { return global.lobstrApi.getPublicKey(); });
+      },
     },
   ];
 
@@ -105,6 +177,22 @@
   function walletsFor(platform) {
     return WALLETS.filter(function (w) {
       return w.platforms.indexOf(platform) !== -1;
+    });
+  }
+
+  /**
+   * Desktop wallets whose browser extension is actually injected into this
+   * page right now (issue #142). The page uses this to decide between
+   * connecting directly (one wallet), showing a chooser (several), or
+   * falling back to manual entry (none).
+   */
+  function detectedDesktopWallets() {
+    return walletsFor('desktop').filter(function (w) {
+      try {
+        return typeof w.detect === 'function' && w.detect();
+      } catch (e) {
+        return false;
+      }
     });
   }
 
@@ -201,6 +289,7 @@
   global.OrbitWalletConnect = {
     isMobile: isMobile,
     walletsFor: walletsFor,
+    detectedDesktopWallets: detectedDesktopWallets,
     WALLETS: WALLETS,
     Sep10: Sep10,
     startMobileConnect: startMobileConnect,

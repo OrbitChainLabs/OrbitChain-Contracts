@@ -26,11 +26,9 @@ impl AssetConfig {
     pub fn from_env() -> Result<Self> {
         dotenv::dotenv().ok();
 
-        let code = env::var("ASSET_CODE")
-            .unwrap_or_else(|_| "ORBIT".to_string());
-        
-        let name = env::var("ASSET_NAME")
-            .unwrap_or_else(|_| "OrbitChain Token".to_string());
+        let code = env::var("ASSET_CODE").unwrap_or_else(|_| "ORBIT".to_string());
+
+        let name = env::var("ASSET_NAME").unwrap_or_else(|_| "OrbitChain Token".to_string());
 
         let issuing_secret_key = env::var("SOROBAN_ISSUING_SECRET_KEY")
             .context("SOROBAN_ISSUING_SECRET_KEY is required")?;
@@ -50,7 +48,6 @@ impl AssetConfig {
     }
 
     /// Validate asset configuration.
-    #[must_use]
     pub fn validate(&self) -> Result<()> {
         if self.code.is_empty() || self.code.len() > 12 {
             anyhow::bail!("Asset code must be 1-12 characters");
@@ -74,7 +71,7 @@ impl AssetConfig {
         println!("Asset Code: {}", self.code);
         println!("Asset Name: {}", self.name);
         println!("Issuer Public Key: {}", self.issuing_public_key);
-        
+
         if self.issuing_secret_key.len() > 10 {
             println!(
                 "Issuer Secret Key: {}...{}",
@@ -102,7 +99,7 @@ impl AssetConfig {
 pub fn generate_issuing_keypair() -> Result<(String, String)> {
     // In a real implementation, this would use the stellar-strkey crate
     // For now, we provide guidance on how to generate keys
-    
+
     println!("🔑 Generating Issuing Keypair");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━");
     println!();
@@ -115,7 +112,7 @@ pub fn generate_issuing_keypair() -> Result<(String, String)> {
     println!("Then set in your .env file:");
     println!("  SOROBAN_ISSUING_SECRET_KEY=S...");
     println!("  SOROBAN_ISSUING_PUBLIC_KEY=G...");
-    
+
     Ok((
         "S_PLACEHOLDER_REPLACE_WITH_YOUR_SECRET_KEY".to_string(),
         "G_PLACEHOLDER_REPLACE_WITH_YOUR_PUBLIC_KEY".to_string(),
@@ -130,16 +127,16 @@ pub fn establish_trustline(config: &TrustlineConfig, network: &str) -> Result<()
     println!("Holder: {}", config.holder_public_key);
     println!("Network: {}", network);
     println!();
-    
+
     // Validate configuration
     if config.asset_code.is_empty() {
         anyhow::bail!("Asset code is required");
     }
-    
+
     if !config.asset_issuer.starts_with('G') {
         anyhow::bail!("Asset issuer must be a valid public key starting with 'G'");
     }
-    
+
     if !config.holder_public_key.starts_with('G') {
         anyhow::bail!("Holder public key must start with 'G'");
     }
@@ -155,9 +152,11 @@ pub fn establish_trustline(config: &TrustlineConfig, network: &str) -> Result<()
     println!("  soroban contract invoke \\");
     println!("    --network {} \\", network);
     println!("    --source-account holder \\");
-    println!("    -- <contract_id> change_trust --asset '{}:{}'", 
-             config.asset_code, config.asset_issuer);
-    
+    println!(
+        "    -- <contract_id> change_trust --asset '{}:{}'",
+        config.asset_code, config.asset_issuer
+    );
+
     Ok(())
 }
 
@@ -170,7 +169,10 @@ pub fn issue_asset(
 ) -> Result<()> {
     println!("💰 Issuing Assets");
     println!("━━━━━━━━━━━━━━━━");
-    println!("Asset: {}:{}", asset_config.code, asset_config.issuing_public_key);
+    println!(
+        "Asset: {}:{}",
+        asset_config.code, asset_config.issuing_public_key
+    );
     println!("Recipient: {}", recipient);
     println!("Amount: {}", amount);
     println!("Network: {}", network);
@@ -178,11 +180,11 @@ pub fn issue_asset(
 
     // Validate
     asset_config.validate()?;
-    
+
     if !recipient.starts_with('G') {
         anyhow::bail!("Recipient must be a valid public key starting with 'G'");
     }
-    
+
     if amount <= 0.0 {
         anyhow::bail!("Amount must be greater than 0");
     }
@@ -199,7 +201,10 @@ pub fn issue_asset(
     println!("    --source-account issuing_account \\");
     println!("    --destination {} \\", recipient);
     println!("    --amount {} \\", amount);
-    println!("    --asset '{}:{}' \\", asset_config.code, asset_config.issuing_public_key);
+    println!(
+        "    --asset '{}:{}' \\",
+        asset_config.code, asset_config.issuing_public_key
+    );
     println!("    --network {}", network);
 
     Ok(())
@@ -211,7 +216,7 @@ pub fn check_issuing_readiness() -> Result<()> {
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
     let asset_config = AssetConfig::from_env()?;
-    
+
     // Display current config
     asset_config.display();
     println!();

@@ -3,7 +3,7 @@
 //! Parses sub-commands for config, network, vault, asset, signing, response,
 //! keymanager, keypair, invoke, deploy, and account operations. `invoke` is
 //! fully implemented (wraps `stellar contract invoke` with vault-backed key
-//! resolution); `deploy` and `account` remain stubs.
+//! resolution); `account` remains a stub.
 //!
 //! Logging (issue #140): every invocation runs inside a `cli_invocation` span
 //! carrying the command and CLI version. The human formatter is the default;
@@ -11,36 +11,29 @@
 //! can parse output instead of scraping interleaved stdout. `RUST_LOG` tunes
 //! verbosity (default `info`).
 
-use anyhow::{anyhow, Result, Context};
+use anyhow::{anyhow, Context, Result};
 use std::env;
 use tracing::{error, info, info_span};
 use tracing_subscriber::EnvFilter;
 
-mod environment_config;
-use environment_config::{EnvironmentConfig, check_testnet_connection};
-
-mod secure_vault;
-use secure_vault::{SecureVault, check_mainnet_readiness, toggle_network};
-
-mod asset_issuing;
-use asset_issuing::{AssetConfig, check_issuing_readiness, generate_issuing_keypair, establish_trustline, issue_asset, TrustlineConfig};
-
-mod key_manager;
-use key_manager::KeyManager;
-
-mod encrypted_vault;
-use encrypted_vault::EncryptedVault;
-
-mod keypair_manager;
-use keypair_manager::{MasterKeypair, DistributionAccount, AccountFunding};
-
-mod signing_request;
-use signing_request::{SigningRequest, SigningRequestBuilder, TransactionBuilder};
-
-mod response_handler;
-use response_handler::{ResponseHandler, SignedTransaction};
-
-mod invoke;
+// The binary consumes the library crate instead of re-declaring each module
+// with `mod` — the duplicate-module pattern compiled every file twice and
+// flagged every helper the CLI doesn't call as dead code in the bin target.
+use orbitchain_tools::asset_issuing::{
+    check_issuing_readiness, establish_trustline, generate_issuing_keypair, issue_asset,
+    AssetConfig, TrustlineConfig,
+};
+use orbitchain_tools::deploy;
+use orbitchain_tools::encrypted_vault::EncryptedVault;
+use orbitchain_tools::environment_config::EnvironmentConfig;
+use orbitchain_tools::invoke;
+use orbitchain_tools::key_manager::KeyManager;
+use orbitchain_tools::keypair_manager::{AccountFunding, DistributionAccount, MasterKeypair};
+use orbitchain_tools::response_handler::ResponseHandler;
+use orbitchain_tools::secure_vault::{toggle_network, SecureVault};
+use orbitchain_tools::signing_request::{
+    SigningRequest, SigningRequestBuilder, TransactionBuilder,
+};
 
 /// Output formatter for CLI logs (issue #140).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -159,7 +152,7 @@ fn dispatch(command: &str, args: &[String]) -> Result<()> {
         "vault" => handle_vault(),
         "toggle" => handle_toggle(&args[2..]),
         "asset" => handle_asset(&args[2..]),
-        "deploy" => handle_deploy(),
+        "deploy" => handle_deploy(&args[2..]),
         "invoke" => invoke::handle(&args[2..]),
         "account" => handle_account(),
         "keymanager" => handle_keymanager(&args[2..]),
@@ -200,11 +193,11 @@ fn print_available_commands() {
     println!("  keypair <cmd>         - Master/distribution keypair lifecycle");
     println!("  signing <cmd>         - Build donation/campaign/custom signing requests");
     println!("  response <cmd>        - Process/validate/save signed wallet responses");
+    println!("  deploy [net] [--wasm P] [--force] - Deploy the core contract (Rust mirror of scripts/deploy.sh)");
     println!("  invoke                - Invoke a contract method (wraps `stellar contract invoke`");
     println!("                          with vault-backed key resolution)");
     println!();
     println!("Stubs (no-op placeholders, do not rely on in production):");
-    println!("  deploy                - Stub. Use `stellar contract deploy` or `make deploy-testnet`.");
     println!("  account               - Stub. Use `keypair generate-master|fund` instead.");
     println!();
     println!("Global flags:");
@@ -218,7 +211,7 @@ fn print_available_commands() {
 
 fn handle_config() -> Result<()> {
     let config = EnvironmentConfig::from_env()?;
-    
+
     println!("📋 Configuration Check");
     println!("━━━━━━━━━━━━━━━━━━━━━");
     println!("Active Network: {}", config.network);
@@ -255,7 +248,7 @@ fn handle_config() -> Result<()> {
 
 fn handle_network() -> Result<()> {
     let config = EnvironmentConfig::from_env()?;
-    
+
     println!("🌐 Network Configuration");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━");
     println!("Active Network: {}", config.network);
@@ -277,20 +270,8 @@ fn handle_network() -> Result<()> {
     Ok(())
 }
 
-fn handle_deploy() -> Result<()> {
-    println!("🚀 The 'deploy' command is a stub and is NOT yet implemented in this binary.");
-    println!("💡 For real deployments use one of:");
-    println!("     make deploy-testnet                  # uses scripts/deploy.sh + stellar contract deploy");
-    println!("     bash scripts/deploy.sh testnet       # ditto, direct script invocation");
-    println!("        (loads $SOROBAN_ADMIN_SECRET_KEY from .env, deploys the WASM at");
-    println!("         target/wasm32v1-none/release/orbitchain_core.wasm to testnet)");
-    println!("     stellar contract deploy \\");
-    println!("         --wasm target/wasm32v1-none/release/orbitchain_core.wasm \\");
-    println!("         --source \"$SOROBAN_ADMIN_SECRET_KEY\" --network testnet      # native fallback");
-    println!("⚠️  Note: the deploy scripts currently ship the legacy `orbitchain-core`");
-    println!("    binary even though `orbitchain-campaign` is canonical (see README).");
-    println!("🔗 Tracked in: https://github.com/OrbitChainLabs/OrbitChain-Contracts/issues/37");
-    Ok(())
+fn handle_deploy(args: &[String]) -> Result<()> {
+    deploy::run(args)
 }
 
 fn handle_account() -> Result<()> {
@@ -308,14 +289,14 @@ fn handle_account() -> Result<()> {
 fn handle_vault() -> Result<()> {
     let vault = SecureVault::from_env();
     vault.display_safe();
-    
+
     println!();
     println!("💡 Security Best Practices:");
     println!("   - Never commit secret keys to version control");
     println!("   - Use .env files and add them to .gitignore");
     println!("   - Rotate keys regularly");
     println!("   - Use separate keys for testnet and mainnet");
-    
+
     Ok(())
 }
 
@@ -359,7 +340,7 @@ fn handle_asset(args: &[String]) -> Result<()> {
                 println!("Usage: orbitchain-cli asset trustline <holder_public_key> [asset_code]");
                 return Ok(());
             }
-            
+
             let holder = &args[1];
             let asset_config = AssetConfig::from_env()?;
             let asset_code = if args.len() > 2 {
@@ -367,15 +348,15 @@ fn handle_asset(args: &[String]) -> Result<()> {
             } else {
                 asset_config.code.clone()
             };
-            
+
             let network = env::var("SOROBAN_NETWORK").unwrap_or_else(|_| "testnet".to_string());
-            
+
             let trustline_config = TrustlineConfig {
                 asset_code,
                 asset_issuer: asset_config.issuing_public_key,
                 holder_public_key: holder.clone(),
             };
-            
+
             establish_trustline(&trustline_config, &network)?;
         }
         "issue" => {
@@ -383,12 +364,12 @@ fn handle_asset(args: &[String]) -> Result<()> {
                 println!("Usage: orbitchain-cli asset issue <recipient> <amount>");
                 return Ok(());
             }
-            
+
             let recipient = &args[1];
             let amount: f64 = args[2].parse().context("Invalid amount")?;
             let network = env::var("SOROBAN_NETWORK").unwrap_or_else(|_| "testnet".to_string());
             let asset_config = AssetConfig::from_env()?;
-            
+
             issue_asset(&asset_config, recipient, amount, &network)?;
         }
         _ => {
@@ -422,14 +403,14 @@ fn handle_keymanager(args: &[String]) -> Result<()> {
                 println!("Usage: orbitchain-cli keymanager encrypt <password> <secret_key>");
                 return Ok(());
             }
-            
+
             let password = &args[1];
             let secret_key = &args[2];
-            
+
             KeyManager::validate_secret_key(secret_key)?;
             let manager = KeyManager::from_password(password)?;
             let encrypted_hex = manager.export_encrypted(secret_key)?;
-            
+
             println!("✅ Key encrypted successfully");
             println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
             println!("Encrypted Key (hex format):");
@@ -442,14 +423,14 @@ fn handle_keymanager(args: &[String]) -> Result<()> {
                 println!("Usage: orbitchain-cli keymanager decrypt <password> <encrypted_hex>");
                 return Ok(());
             }
-            
+
             let password = &args[1];
             let encrypted_hex = &args[2];
-            
+
             let manager = KeyManager::from_password(password)?;
             let encrypted = manager.import_encrypted(encrypted_hex)?;
             let secret_key = manager.decrypt_key(&encrypted)?;
-            
+
             println!("✅ Key decrypted successfully");
             println!("━━━━━━━━━━━━━━━━━━━━━━━━");
             println!("Secret Key: {}", secret_key);
@@ -461,14 +442,17 @@ fn handle_keymanager(args: &[String]) -> Result<()> {
                 println!("Usage: orbitchain-cli keymanager init-vault <password>");
                 return Ok(());
             }
-            
+
             let password = &args[1];
-            let mut vault = EncryptedVault::with_password(password)?;
-            
+            let vault = EncryptedVault::with_password(password)?;
+
             println!("✅ Encrypted vault initialized");
             vault.display_status();
             println!();
-            println!("💡 Set VAULT_MASTER_PASSWORD={} in your .env file", password);
+            println!(
+                "💡 Set VAULT_MASTER_PASSWORD={} in your .env file",
+                password
+            );
         }
         "vault-status" => {
             let vault = EncryptedVault::from_env()?;
@@ -479,7 +463,7 @@ fn handle_keymanager(args: &[String]) -> Result<()> {
                 println!("Usage: orbitchain-cli keymanager vault-save <path>");
                 return Ok(());
             }
-            
+
             let path = &args[1];
             let vault = EncryptedVault::from_env()?;
             vault.save_to_file(path)?;
@@ -489,10 +473,10 @@ fn handle_keymanager(args: &[String]) -> Result<()> {
                 println!("Usage: orbitchain-cli keymanager vault-load <path> <password>");
                 return Ok(());
             }
-            
+
             let path = &args[1];
             let password = &args[2];
-            
+
             let vault = EncryptedVault::load_from_file(path, password)?;
             vault.display_status();
         }
@@ -525,32 +509,37 @@ fn handle_keypair(args: &[String]) -> Result<()> {
     match args[0].as_str() {
         "generate-master" => {
             let network = env::var("SOROBAN_NETWORK").unwrap_or_else(|_| "testnet".to_string());
-            
+
             println!("🔑 Generating Master Keypair");
             println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            
+
             let keypair = MasterKeypair::generate(&network)?;
             keypair.display_safe();
-            
+
             println!();
             println!("💡 Store this keypair securely:");
-            println!("   orbitchain-cli keymanager encrypt '<password>' '{}'", keypair.secret_key);
+            println!(
+                "   orbitchain-cli keymanager encrypt '<password>' '{}'",
+                keypair.secret_key
+            );
         }
         "generate-distribution" => {
             if args.len() < 2 {
-                println!("Usage: orbitchain-cli keypair generate-distribution <issuing_public_key>");
+                println!(
+                    "Usage: orbitchain-cli keypair generate-distribution <issuing_public_key>"
+                );
                 return Ok(());
             }
-            
+
             let issuing_pub = &args[1];
             let network = env::var("SOROBAN_NETWORK").unwrap_or_else(|_| "testnet".to_string());
-            
+
             println!("💰 Generating Distribution Account");
             println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            
+
             let dist = DistributionAccount::generate(&network, issuing_pub)?;
             dist.display_safe();
-            
+
             println!();
             println!("💡 Link this distribution account to your issuing account");
         }
@@ -583,11 +572,11 @@ fn handle_keypair(args: &[String]) -> Result<()> {
                 println!("Usage: orbitchain-cli keypair fund <account_public_key> <amount_xlm>");
                 return Ok(());
             }
-            
+
             let account_pub = &args[1];
             let amount: f64 = args[2].parse().context("Invalid amount")?;
             let network = env::var("SOROBAN_NETWORK").unwrap_or_else(|_| "testnet".to_string());
-            
+
             let mut funding = AccountFunding::new(account_pub, &network)?;
             funding.fund_testnet(amount)?;
             funding.display_status();
@@ -595,17 +584,15 @@ fn handle_keypair(args: &[String]) -> Result<()> {
         "validate-master" => {
             let vault = EncryptedVault::from_env()?;
             match MasterKeypair::load_from_vault(&vault) {
-                Ok(keypair) => {
-                    match keypair.validate() {
-                        Ok(_) => {
-                            println!("✅ Master keypair is valid");
-                            keypair.display_safe();
-                        }
-                        Err(e) => {
-                            println!("❌ Master keypair validation failed: {}", e);
-                        }
+                Ok(keypair) => match keypair.validate() {
+                    Ok(_) => {
+                        println!("✅ Master keypair is valid");
+                        keypair.display_safe();
                     }
-                }
+                    Err(e) => {
+                        println!("❌ Master keypair validation failed: {}", e);
+                    }
+                },
                 Err(_) => {
                     println!("❌ Master keypair not found in vault");
                 }
@@ -614,17 +601,15 @@ fn handle_keypair(args: &[String]) -> Result<()> {
         "validate-distribution" => {
             let vault = EncryptedVault::from_env()?;
             match DistributionAccount::load_from_vault(&vault) {
-                Ok(dist) => {
-                    match dist.validate() {
-                        Ok(_) => {
-                            println!("✅ Distribution account is valid");
-                            dist.display_safe();
-                        }
-                        Err(e) => {
-                            println!("❌ Distribution account validation failed: {}", e);
-                        }
+                Ok(dist) => match dist.validate() {
+                    Ok(_) => {
+                        println!("✅ Distribution account is valid");
+                        dist.display_safe();
                     }
-                }
+                    Err(e) => {
+                        println!("❌ Distribution account validation failed: {}", e);
+                    }
+                },
                 Err(_) => {
                     println!("❌ Distribution account not found in vault");
                 }
@@ -662,10 +647,8 @@ fn handle_signing(args: &[String]) -> Result<()> {
             }
 
             let donor = args[1].clone();
-            let campaign_id: u64 = args[2].parse()
-                .context("Invalid campaign ID")?;
-            let amount: i128 = args[3].parse()
-                .context("Invalid amount")?;
+            let campaign_id: u64 = args[2].parse().context("Invalid campaign ID")?;
+            let amount: i128 = args[3].parse().context("Invalid amount")?;
             let asset = if args.len() > 4 {
                 args[4].clone()
             } else {
@@ -677,7 +660,13 @@ fn handle_signing(args: &[String]) -> Result<()> {
                 None
             };
 
-            match TransactionBuilder::build_donation_request(donor, campaign_id, amount, asset, memo) {
+            match TransactionBuilder::build_donation_request(
+                donor,
+                campaign_id,
+                amount,
+                asset,
+                memo,
+            ) {
                 Ok(req) => {
                     req.display();
                     println!();
@@ -699,10 +688,8 @@ fn handle_signing(args: &[String]) -> Result<()> {
 
             let creator = args[1].clone();
             let title = args[2].clone();
-            let goal: i128 = args[3].parse()
-                .context("Invalid goal")?;
-            let deadline: u64 = args[4].parse()
-                .context("Invalid deadline")?;
+            let goal: i128 = args[3].parse().context("Invalid goal")?;
+            let deadline: u64 = args[4].parse().context("Invalid deadline")?;
 
             match TransactionBuilder::build_campaign_request(creator, title, goal, deadline) {
                 Ok(req) => {
@@ -732,18 +719,16 @@ fn handle_signing(args: &[String]) -> Result<()> {
             };
 
             match SigningRequestBuilder::new(xdr, None) {
-                Ok(builder) => {
-                    match builder.with_description(description).build() {
-                        Ok(req) => {
-                            req.display();
-                            println!();
-                            println!("✅ Signing request created successfully");
-                        }
-                        Err(e) => {
-                            println!("❌ Failed to build request: {}", e);
-                        }
+                Ok(builder) => match builder.with_description(description).build() {
+                    Ok(req) => {
+                        req.display();
+                        println!();
+                        println!("✅ Signing request created successfully");
                     }
-                }
+                    Err(e) => {
+                        println!("❌ Failed to build request: {}", e);
+                    }
+                },
                 Err(e) => {
                     println!("❌ Failed to create builder: {}", e);
                 }
@@ -757,24 +742,20 @@ fn handle_signing(args: &[String]) -> Result<()> {
 
             let path = &args[1];
             match std::fs::read_to_string(path) {
-                Ok(content) => {
-                    match SigningRequest::from_json(&content) {
-                        Ok(req) => {
-                            match req.validate() {
-                                Ok(_) => {
-                                    println!("✅ Signing request is valid");
-                                    req.display();
-                                }
-                                Err(e) => {
-                                    println!("❌ Validation failed: {}", e);
-                                }
-                            }
+                Ok(content) => match SigningRequest::from_json(&content) {
+                    Ok(req) => match req.validate() {
+                        Ok(_) => {
+                            println!("✅ Signing request is valid");
+                            req.display();
                         }
                         Err(e) => {
-                            println!("❌ Failed to parse request: {}", e);
+                            println!("❌ Validation failed: {}", e);
                         }
+                    },
+                    Err(e) => {
+                        println!("❌ Failed to parse request: {}", e);
                     }
-                }
+                },
                 Err(e) => {
                     println!("❌ Failed to read file: {}", e);
                 }
@@ -790,24 +771,20 @@ fn handle_signing(args: &[String]) -> Result<()> {
 
             let path = &args[1];
             match std::fs::read_to_string(path) {
-                Ok(content) => {
-                    match SigningRequest::from_json(&content) {
-                        Ok(req) => {
-                            match req.to_wallet_format() {
-                                Ok(wallet_format) => {
-                                    println!("📤 Wallet Format:");
-                                    println!("{}", wallet_format);
-                                }
-                                Err(e) => {
-                                    println!("❌ Failed to export: {}", e);
-                                }
-                            }
+                Ok(content) => match SigningRequest::from_json(&content) {
+                    Ok(req) => match req.to_wallet_format() {
+                        Ok(wallet_format) => {
+                            println!("📤 Wallet Format:");
+                            println!("{}", wallet_format);
                         }
                         Err(e) => {
-                            println!("❌ Failed to parse request: {}", e);
+                            println!("❌ Failed to export: {}", e);
                         }
+                    },
+                    Err(e) => {
+                        println!("❌ Failed to parse request: {}", e);
                     }
-                }
+                },
                 Err(e) => {
                     println!("❌ Failed to read file: {}", e);
                 }
@@ -866,27 +843,23 @@ fn handle_response(args: &[String]) -> Result<()> {
 
             let path = &args[1];
             match std::fs::read_to_string(path) {
-                Ok(content) => {
-                    match ResponseHandler::parse_response(&content) {
-                        Ok(tx) => {
-                            match ResponseHandler::validate(&tx) {
-                                Ok(_) => {
-                                    println!("✅ Transaction is valid");
-                                    println!("Request ID:    {}", tx.request_id);
-                                    println!("Signer:        {}", tx.signer);
-                                    println!("Status:        {}", tx.status);
-                                    println!("XDR Length:    {} bytes", tx.transaction_xdr.len());
-                                }
-                                Err(e) => {
-                                    println!("❌ Validation failed: {}", e);
-                                }
-                            }
+                Ok(content) => match ResponseHandler::parse_response(&content) {
+                    Ok(tx) => match ResponseHandler::validate(&tx) {
+                        Ok(_) => {
+                            println!("✅ Transaction is valid");
+                            println!("Request ID:    {}", tx.request_id);
+                            println!("Signer:        {}", tx.signer);
+                            println!("Status:        {}", tx.status);
+                            println!("XDR Length:    {} bytes", tx.transaction_xdr.len());
                         }
                         Err(e) => {
-                            println!("❌ Failed to parse response: {}", e);
+                            println!("❌ Validation failed: {}", e);
                         }
+                    },
+                    Err(e) => {
+                        println!("❌ Failed to parse response: {}", e);
                     }
-                }
+                },
                 Err(e) => {
                     println!("❌ Failed to read file: {}", e);
                 }
@@ -902,17 +875,15 @@ fn handle_response(args: &[String]) -> Result<()> {
             let output_path = &args[2];
 
             match ResponseHandler::parse_response(&response) {
-                Ok(tx) => {
-                    match ResponseHandler::save_to_file(&tx, output_path) {
-                        Ok(_) => {
-                            println!("✅ Transaction saved to {}", output_path);
-                            println!("Request ID: {}", tx.request_id);
-                        }
-                        Err(e) => {
-                            println!("❌ Failed to save transaction: {}", e);
-                        }
+                Ok(tx) => match ResponseHandler::save_to_file(&tx, output_path) {
+                    Ok(_) => {
+                        println!("✅ Transaction saved to {}", output_path);
+                        println!("Request ID: {}", tx.request_id);
                     }
-                }
+                    Err(e) => {
+                        println!("❌ Failed to save transaction: {}", e);
+                    }
+                },
                 Err(e) => {
                     println!("❌ Failed to parse response: {}", e);
                 }
@@ -979,7 +950,6 @@ fn handle_response(args: &[String]) -> Result<()> {
     Ok(())
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1031,7 +1001,10 @@ mod tests {
     fn test_invalid_log_format_is_rejected() {
         let mut args = argv(&["orbitchain-cli", "--log-format=yaml", "config"]);
         let err = take_log_format(&mut args).unwrap_err().to_string();
-        assert!(err.contains("invalid --log-format"), "unexpected error: {err}");
+        assert!(
+            err.contains("invalid --log-format"),
+            "unexpected error: {err}"
+        );
     }
 
     #[test]

@@ -1,8 +1,8 @@
 use anyhow::Result;
 use std::env;
 
-use crate::key_manager::KeyManager;
 use crate::encrypted_vault::EncryptedVault;
+use crate::key_manager::KeyManager;
 
 /// Master keypair for the platform
 #[derive(Debug, Clone)]
@@ -14,7 +14,6 @@ pub struct MasterKeypair {
 
 impl MasterKeypair {
     /// Generate a new master keypair
-    #[must_use]
     pub fn generate(network: &str) -> Result<Self> {
         // In production, this would use Stellar SDK to generate keypair
         // For now, validate that the network is valid
@@ -37,7 +36,6 @@ impl MasterKeypair {
     }
 
     /// Store master keypair in encrypted vault.
-    #[must_use]
     pub fn store_in_vault(&self, vault: &mut EncryptedVault) -> Result<()> {
         vault.store_secret_key("master_secret_key", &self.secret_key)?;
         vault.store_public_key("master_public_key", &self.public_key)?;
@@ -45,7 +43,6 @@ impl MasterKeypair {
     }
 
     /// Load master keypair from vault.
-    #[must_use]
     pub fn load_from_vault(vault: &EncryptedVault) -> Result<Self> {
         let public_key = vault.retrieve_public_key("master_public_key")?;
         let secret_key = vault.retrieve_secret_key("master_secret_key")?;
@@ -63,8 +60,9 @@ impl MasterKeypair {
         println!("🔑 Master Keypair");
         println!("━━━━━━━━━━━━━━━━");
         println!("Public Key: {}", self.public_key);
-        println!("Secret Key: {}...{}", 
-            &self.secret_key[..4], 
+        println!(
+            "Secret Key: {}...{}",
+            &self.secret_key[..4],
             &self.secret_key[self.secret_key.len() - 4..]
         );
         println!("Network: {}", self.network);
@@ -82,7 +80,6 @@ pub struct DistributionAccount {
 
 impl DistributionAccount {
     /// Generate a new distribution account.
-    #[must_use]
     pub fn generate(network: &str, issuing_public_key: &str) -> Result<Self> {
         // In production, this would use Stellar SDK to generate keypair
         KeyManager::validate_public_key(issuing_public_key)?;
@@ -96,7 +93,6 @@ impl DistributionAccount {
     }
 
     /// Store distribution account in vault.
-    #[must_use]
     pub fn store_in_vault(&self, vault: &mut EncryptedVault) -> Result<()> {
         vault.store_secret_key("distribution_secret_key", &self.secret_key)?;
         vault.store_public_key("distribution_public_key", &self.public_key)?;
@@ -105,7 +101,6 @@ impl DistributionAccount {
     }
 
     /// Load distribution account from vault.
-    #[must_use]
     pub fn load_from_vault(vault: &EncryptedVault) -> Result<Self> {
         let public_key = vault.retrieve_public_key("distribution_public_key")?;
         let secret_key = vault.retrieve_secret_key("distribution_secret_key")?;
@@ -121,7 +116,6 @@ impl DistributionAccount {
     }
 
     /// Validate distribution account setup (must differ from issuing).
-    #[must_use]
     pub fn validate(&self) -> Result<()> {
         KeyManager::validate_public_key(&self.public_key)?;
         KeyManager::validate_public_key(&self.issuing_public_key)?;
@@ -140,8 +134,9 @@ impl DistributionAccount {
         println!("━━━━━━━━━━━━━━━━━━━━━");
         println!("Distribution Public Key: {}", self.public_key);
         println!("Issuing Public Key: {}", self.issuing_public_key);
-        println!("Secret Key: {}...{}", 
-            &self.secret_key[..4], 
+        println!(
+            "Secret Key: {}...{}",
+            &self.secret_key[..4],
             &self.secret_key[self.secret_key.len() - 4..]
         );
         println!("Network: {}", self.network);
@@ -159,7 +154,6 @@ pub struct AccountFunding {
 
 impl AccountFunding {
     /// Create funding status checker.
-    #[must_use]
     pub fn new(account_public_key: &str, network: &str) -> Result<Self> {
         KeyManager::validate_public_key(account_public_key)?;
 
@@ -203,7 +197,14 @@ impl AccountFunding {
         println!("Account: {}", self.account_public_key);
         println!("Network: {}", self.network);
         println!("Balance: {} XLM", self.balance);
-        println!("Status: {}", if self.is_funded { "✅ Funded" } else { "⏳ Not Funded" });
+        println!(
+            "Status: {}",
+            if self.is_funded {
+                "✅ Funded"
+            } else {
+                "⏳ Not Funded"
+            }
+        );
     }
 }
 
@@ -214,8 +215,8 @@ mod tests {
     #[test]
     fn test_master_keypair_validate() {
         let keypair = MasterKeypair {
-            public_key: "GDVEU3DD4KOFECV66VIHWEZOYX4ZKR3WV27L464SIIPOU2IUI3JCZA57".to_string(),
-            secret_key: "SADQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQP54X".to_string(),
+            public_key: "GAMX62ZD4FWIKMWGVPEDR6WNL2TYTPQMO2ZJEAZUAON7VCZ5G2GWDF7W".to_string(),
+            secret_key: "SAVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCVLG5".to_string(),
             network: "testnet".to_string(),
         };
         assert!(keypair.validate().is_ok());
@@ -224,9 +225,10 @@ mod tests {
     #[test]
     fn test_distribution_account_different_from_issuing() {
         let dist = DistributionAccount {
-            public_key: "GDVEU3DD4KOFECV66VIHWEZOYX4ZKR3WV27L464SIIPOU2IUI3JCZA57".to_string(),
-            secret_key: "SADQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQP54X".to_string(),
-            issuing_public_key: "GDVEU3DD4KOFECV66VIHWEZOYX4ZKR3WV27L464SIIPOU2IUI3JCZA57".to_string(),
+            public_key: "GAMX62ZD4FWIKMWGVPEDR6WNL2TYTPQMO2ZJEAZUAON7VCZ5G2GWDF7W".to_string(),
+            secret_key: "SAVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCVLG5".to_string(),
+            issuing_public_key: "GAMX62ZD4FWIKMWGVPEDR6WNL2TYTPQMO2ZJEAZUAON7VCZ5G2GWDF7W"
+                .to_string(),
             network: "testnet".to_string(),
         };
         // Should fail because they're the same
@@ -236,8 +238,8 @@ mod tests {
     #[test]
     fn test_account_funding_positive_amount() -> Result<()> {
         let mut funding = AccountFunding::new(
-            "GDVEU3DD4KOFECV66VIHWEZOYX4ZKR3WV27L464SIIPOU2IUI3JCZA57",
-            "testnet"
+            "GAMX62ZD4FWIKMWGVPEDR6WNL2TYTPQMO2ZJEAZUAON7VCZ5G2GWDF7W",
+            "testnet",
         )?;
         funding.fund_testnet(100.0)?;
         assert!(funding.is_funded);
@@ -248,8 +250,8 @@ mod tests {
     #[test]
     fn test_account_funding_invalid_amount() -> Result<()> {
         let mut funding = AccountFunding::new(
-            "GDVEU3DD4KOFECV66VIHWEZOYX4ZKR3WV27L464SIIPOU2IUI3JCZA57",
-            "testnet"
+            "GAMX62ZD4FWIKMWGVPEDR6WNL2TYTPQMO2ZJEAZUAON7VCZ5G2GWDF7W",
+            "testnet",
         )?;
         let result = funding.fund_testnet(-50.0);
         assert!(result.is_err());
@@ -259,8 +261,8 @@ mod tests {
     #[test]
     fn test_account_funding_mainnet_fails() -> Result<()> {
         let mut funding = AccountFunding::new(
-            "GDVEU3DD4KOFECV66VIHWEZOYX4ZKR3WV27L464SIIPOU2IUI3JCZA57",
-            "mainnet"
+            "GAMX62ZD4FWIKMWGVPEDR6WNL2TYTPQMO2ZJEAZUAON7VCZ5G2GWDF7W",
+            "mainnet",
         )?;
         let result = funding.fund_testnet(100.0);
         assert!(result.is_err());

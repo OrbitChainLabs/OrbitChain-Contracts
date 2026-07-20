@@ -48,7 +48,6 @@ impl Drop for KeyManager {
 impl KeyManager {
     /// Initialize KeyManager from a master password/key.
     /// Derives a 256-bit key using SHA-256.
-    #[must_use]
     pub fn from_password(password: &str) -> Result<Self> {
         let mut hasher = Sha256::new();
         hasher.update(password.as_bytes());
@@ -61,7 +60,6 @@ impl KeyManager {
     }
 
     /// Initialize KeyManager from a 32-byte hex string.
-    #[must_use]
     pub fn from_hex_key(hex_key: &str) -> Result<Self> {
         let key_bytes = hex::decode(hex_key).context("Failed to decode hex key")?;
         if key_bytes.len() != 32 {
@@ -75,6 +73,10 @@ impl KeyManager {
     }
 
     /// Encrypt a private key (secret key) using AES-256-GCM
+    // `Nonce::from_slice` is deprecated in favour of a generic-array 1.x API
+    // that aes-gcm 0.10 does not yet expose; migrating means bumping the
+    // aes-gcm dependency, which is separate work from this PR.
+    #[allow(deprecated)]
     pub fn encrypt_key(&self, secret_key: &str) -> Result<EncryptedKey> {
         let cipher = Aes256Gcm::new_from_slice(&self.master_key)
             .map_err(|e| anyhow::anyhow!("Failed to create cipher: {}", e))?;
@@ -97,6 +99,7 @@ impl KeyManager {
     }
 
     /// Decrypt a private key using AES-256-GCM
+    #[allow(deprecated)] // see encrypt_key: deprecated Nonce::from_slice, tracked upgrade
     pub fn decrypt_key(&self, encrypted: &EncryptedKey) -> Result<String> {
         let cipher = Aes256Gcm::new_from_slice(&self.master_key)
             .map_err(|e| anyhow::anyhow!("Failed to create cipher: {}", e))?;
@@ -105,7 +108,9 @@ impl KeyManager {
 
         let plaintext = cipher
             .decrypt(nonce, Payload::from(encrypted.ciphertext.as_ref()))
-            .map_err(|e| anyhow::anyhow!("Decryption failed (wrong key or corrupted data): {}", e))?;
+            .map_err(|e| {
+                anyhow::anyhow!("Decryption failed (wrong key or corrupted data): {}", e)
+            })?;
 
         String::from_utf8(plaintext).context("Decrypted key is not valid UTF-8")
     }
@@ -132,7 +137,10 @@ impl KeyManager {
         let ciphertext = hex::decode(parts[1]).context("Failed to decode ciphertext")?;
 
         if nonce.len() != 12 {
-            anyhow::bail!("Invalid nonce length: expected 12 bytes, got {}", nonce.len());
+            anyhow::bail!(
+                "Invalid nonce length: expected 12 bytes, got {}",
+                nonce.len()
+            );
         }
 
         Ok(EncryptedKey { nonce, ciphertext })
@@ -140,7 +148,6 @@ impl KeyManager {
 
     /// Validate a secret key format (basic Stellar check).
     /// Must start with 'S' and be at least 56 characters.
-    #[must_use]
     pub fn validate_secret_key(secret_key: &str) -> Result<()> {
         if !secret_key.starts_with('S') {
             anyhow::bail!("Secret key must start with 'S' (Stellar format)");
@@ -153,7 +160,6 @@ impl KeyManager {
 
     /// Validate a public key format (basic Stellar check).
     /// Must start with 'G' and be at least 56 characters.
-    #[must_use]
     pub fn validate_public_key(public_key: &str) -> Result<()> {
         if !public_key.starts_with('G') {
             anyhow::bail!("Public key must start with 'G' (Stellar format)");
@@ -172,7 +178,7 @@ mod tests {
     #[test]
     fn test_encrypt_decrypt_roundtrip() -> Result<()> {
         let manager = KeyManager::from_password("my_secure_password")?;
-        let secret_key = "SADQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQP54X";
+        let secret_key = "SAVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCVLG5";
 
         let encrypted = manager.encrypt_key(secret_key)?;
         let decrypted = manager.decrypt_key(&encrypted)?;
@@ -184,7 +190,7 @@ mod tests {
     #[test]
     fn test_export_import_roundtrip() -> Result<()> {
         let manager = KeyManager::from_password("another_password")?;
-        let secret_key = "SADQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQP54X";
+        let secret_key = "SAVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCVLG5";
 
         let exported = manager.export_encrypted(secret_key)?;
         let imported = manager.import_encrypted(&exported)?;
@@ -197,7 +203,7 @@ mod tests {
     #[test]
     fn test_wrong_password_fails() -> Result<()> {
         let manager1 = KeyManager::from_password("password1")?;
-        let secret_key = "SADQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQP54X";
+        let secret_key = "SAVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCVLG5";
 
         let encrypted = manager1.encrypt_key(secret_key)?;
 
@@ -211,21 +217,33 @@ mod tests {
 
     #[test]
     fn test_validate_secret_key() {
-        assert!(KeyManager::validate_secret_key("SADQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQP54X").is_ok());
-        assert!(KeyManager::validate_secret_key("GDVEU3DD4KOFECV66VIHWEZOYX4ZKR3WV27L464SIIPOU2IUI3JCZA57").is_err());
+        assert!(KeyManager::validate_secret_key(
+            "SAVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCVLG5"
+        )
+        .is_ok());
+        assert!(KeyManager::validate_secret_key(
+            "GAMX62ZD4FWIKMWGVPEDR6WNL2TYTPQMO2ZJEAZUAON7VCZ5G2GWDF7W"
+        )
+        .is_err());
         assert!(KeyManager::validate_secret_key("short").is_err());
     }
 
     #[test]
     fn test_validate_public_key() {
-        assert!(KeyManager::validate_public_key("GDVEU3DD4KOFECV66VIHWEZOYX4ZKR3WV27L464SIIPOU2IUI3JCZA57").is_ok());
-        assert!(KeyManager::validate_public_key("SADQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQP54X").is_err());
+        assert!(KeyManager::validate_public_key(
+            "GAMX62ZD4FWIKMWGVPEDR6WNL2TYTPQMO2ZJEAZUAON7VCZ5G2GWDF7W"
+        )
+        .is_ok());
+        assert!(KeyManager::validate_public_key(
+            "SAVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCVLG5"
+        )
+        .is_err());
     }
 
     #[test]
     fn test_encrypted_key_zeroizes_on_drop() {
         let manager = KeyManager::from_password("password").unwrap();
-        let secret_key = "SADQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQP54X";
+        let secret_key = "SAVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCVLG5";
         let _encrypted = manager.encrypt_key(secret_key).unwrap();
         // When _encrypted goes out of scope, it should zeroize
         // (can't directly test zeroization, but ensures Drop runs without panic)

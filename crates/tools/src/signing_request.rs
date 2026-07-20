@@ -20,12 +20,21 @@ use std::env;
 /// `A-Z` followed by `2-7`.
 const CROCKFORD_ALPHABET: &[u8; 32] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
-/// Version byte prefixing Stellar ed25519 public account IDs (`G…`).
-/// Per SEP-23 strkey: `6 << 3` (0x30), whose top 5 base32 bits render as 'G'.
+/// Version byte for Stellar ed25519 public account IDs.
+///
+/// This is the *strkey* version byte (`6 << 3`), not the ASCII letter `G`.
+/// It is what makes the base32 encoding begin with `G`; using `b'G'` (0x47)
+/// here instead produces an `I…` string that Stellar wallets — and this
+/// crate's own `KeyManager::validate_public_key` — reject.
 const ED25519_PUBLIC_VERSION_BYTE: u8 = 6 << 3;
 
-/// Version byte prefixing Stellar ed25519 secret seeds (`S…`).
-/// Per SEP-23 strkey: `18 << 3` (0x90), whose top 5 base32 bits render as 'S'.
+/// Version byte for Stellar ed25519 secret seeds (`18 << 3`), which makes the
+/// encoding begin with `S`. See the note above; `b'S'` (0x53) is wrong.
+///
+/// Only the strkey round-trip test re-encodes a seed today (production paths
+/// decode seeds but never encode them), so this is test-gated to keep the
+/// non-test build free of dead code.
+#[cfg(test)]
 const ED25519_SEED_VERSION_BYTE: u8 = 18 << 3;
 
 /// Decoded strkey length in bytes: 1 version byte + 32 key bytes + 2 CRC16 bytes.
@@ -57,10 +66,7 @@ impl SigningRequestBuilder {
             env::var("SOROBAN_NETWORK").unwrap_or_else(|_| "testnet".to_string())
         });
 
-        let id = format!(
-            "req_{}",
-            chrono::Local::now().timestamp_millis()
-        );
+        let id = format!("req_{}", chrono::Local::now().timestamp_millis());
 
         Ok(SigningRequestBuilder {
             id,
@@ -105,19 +111,12 @@ impl TransactionBuilder {
         asset: String,
         memo: Option<String>,
     ) -> Result<SigningRequest> {
-        let desc = format!(
-            "Donate {} {} to campaign #{}",
-            amount, asset, campaign_id
-        );
+        let desc = format!("Donate {} {} to campaign #{}", amount, asset, campaign_id);
 
         // Placeholder XDR - in real implementation, this would be built from actual transaction
-        let transaction_xdr = format!(
-            "AAAAAA=={}{}{}",
-            donor_address, campaign_id, amount
-        );
+        let transaction_xdr = format!("AAAAAA=={}{}{}", donor_address, campaign_id, amount);
 
-        let mut builder = SigningRequestBuilder::new(transaction_xdr, None)?
-            .with_description(desc);
+        let mut builder = SigningRequestBuilder::new(transaction_xdr, None)?.with_description(desc);
 
         if let Some(m) = memo {
             let desc = format!("{} [memo: {}]", builder.description, m);
@@ -139,10 +138,7 @@ impl TransactionBuilder {
             title, goal, deadline
         );
 
-        let transaction_xdr = format!(
-            "AAAAAA=={}{}{}{}",
-            creator_address, title, goal, deadline
-        );
+        let transaction_xdr = format!("AAAAAA=={}{}{}{}", creator_address, title, goal, deadline);
 
         SigningRequestBuilder::new(transaction_xdr, None)?
             .with_description(desc)
@@ -152,17 +148,13 @@ impl TransactionBuilder {
 
 impl SigningRequest {
     /// Convert signing request to JSON for transmission.
-    #[must_use]
     pub fn to_json(&self) -> Result<String> {
-        serde_json::to_string_pretty(self)
-            .context("Failed to serialize signing request to JSON")
+        serde_json::to_string_pretty(self).context("Failed to serialize signing request to JSON")
     }
 
     /// Create from JSON string.
-    #[must_use]
     pub fn from_json(json: &str) -> Result<Self> {
-        serde_json::from_str(json)
-            .context("Failed to deserialize signing request from JSON")
+        serde_json::from_str(json).context("Failed to deserialize signing request from JSON")
     }
 
     /// Convert to wallet signing format (for Freighter and similar)
@@ -193,7 +185,6 @@ impl SigningRequest {
     }
 
     /// Validate the signing request.
-    #[must_use]
     pub fn validate(&self) -> Result<()> {
         if self.id.is_empty() {
             return Err(anyhow!("Request ID cannot be empty"));
@@ -210,7 +201,6 @@ impl SigningRequest {
     }
 
     /// Get QR code data for mobile wallet.
-    #[must_use]
     pub fn to_qr_data(&self) -> Result<String> {
         self.to_wallet_format()
     }
@@ -260,7 +250,6 @@ impl ServerSignedTransaction {
     ///   decode fails or the CRC16-XModem checksum mismatches).
     /// * `signature` is not valid hex.
     /// * `signature` decodes to anything other than 64 bytes.
-    #[must_use]
     pub fn verify(&self) -> Result<bool> {
         if self.algorithm != "ed25519" {
             anyhow::bail!(
@@ -269,26 +258,26 @@ impl ServerSignedTransaction {
             );
         }
         if self.signer_public_key.is_empty() {
-            anyhow::bail!(
-                "ServerSignedTransaction.signer_public_key is empty; cannot verify"
-            );
+            anyhow::bail!("ServerSignedTransaction.signer_public_key is empty; cannot verify");
         }
 
         let public_bytes = strkey_decode(&self.signer_public_key, "public")?;
         let verifying_key = VerifyingKey::from_bytes(&public_bytes)
             .map_err(|e| anyhow!("Invalid Ed25519 verifying key: {}", e))?;
 
-        let sig_bytes = hex::decode(&self.signature)
-            .context("signature is not valid hex")?;
+        let sig_bytes = hex::decode(&self.signature).context("signature is not valid hex")?;
         if sig_bytes.len() != 64 {
             anyhow::bail!(
                 "Ed25519 signature must decode to 64 bytes, got {}",
                 sig_bytes.len()
             );
         }
+        // ed25519-dalek 2.x takes a fixed-size array; the length is already
+        // guaranteed by the check above, so this conversion cannot fail.
         let sig_array: [u8; 64] = sig_bytes
+            .as_slice()
             .try_into()
-            .map_err(|_| anyhow!("Ed25519 signature must decode to exactly 64 bytes"))?;
+            .context("Ed25519 signature must decode to 64 bytes")?;
         let signature = Signature::from_bytes(&sig_array);
 
         Ok(verifying_key
@@ -311,9 +300,10 @@ impl SigningRequest {
         }
         crate::key_manager::KeyManager::validate_secret_key(secret_key)?;
 
+        // `strkey_decode` already yields a validated [u8; 32]; in ed25519-dalek
+        // 2.x `SigningKey::from_bytes` is infallible and returns the key
+        // directly (1.x returned a Result, hence the previous `map_err`).
         let seed_bytes = strkey_decode(secret_key, "secret")?;
-        // ed25519-dalek 2.x: `SigningKey::from_bytes` is infallible for a
-        // 32-byte seed (strkey_decode already guarantees the length).
         let signing_key = SigningKey::from_bytes(&seed_bytes);
         let verifying_key = signing_key.verifying_key();
 
@@ -323,10 +313,8 @@ impl SigningRequest {
         // property callers previously relied on.
         let signature: Signature = signing_key.sign(self.transaction_xdr.as_bytes());
         let sig_hex = hex::encode(signature.to_bytes());
-        let signer_public_key = strkey_encode(
-            &verifying_key.to_bytes(),
-            ED25519_PUBLIC_VERSION_BYTE,
-        );
+        let signer_public_key =
+            strkey_encode(&verifying_key.to_bytes(), ED25519_PUBLIC_VERSION_BYTE);
 
         Ok(ServerSignedTransaction {
             request_id: self.id.clone(),
@@ -339,7 +327,6 @@ impl SigningRequest {
     }
 
     /// Sign using the secret key stored in the `SOROBAN_SECRET_KEY` env var.
-    #[must_use]
     pub fn sign_from_env(&self) -> Result<ServerSignedTransaction> {
         let secret_key =
             env::var("SOROBAN_SECRET_KEY").context("SOROBAN_SECRET_KEY not set in environment")?;
@@ -455,20 +442,11 @@ fn strkey_encode(key: &[u8; 32], type_byte: u8) -> String {
 mod tests {
     use super::*;
 
-    /// Deterministic test keypair (seed = `[7u8; 32]`), strkey-encoded with
-    /// this module's own `strkey_encode`. The public key is the canonical
-    /// Ed25519 point derived from the seed; signing and verifying should
-    /// never produce a different public key.
-    const FIXTURE_SECRET: &str =
-        "SADQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQP54X";
-    const FIXTURE_PUBLIC: &str =
-        "GDVEU3DD4KOFECV66VIHWEZOYX4ZKR3WV27L464SIIPOU2IUI3JCZA57";
-
-    /// A second, unrelated deterministic keypair (seed = `[9u8; 32]`).
-    const OTHER_SECRET: &str =
-        "SAEQSCIJBEEQSCIJBEEQSCIJBEEQSCIJBEEQSCIJBEEQSCIJBEEQTDMN";
-    const OTHER_PUBLIC: &str =
-        "GD6ROJBYLKQMOW3E7N4M2YBPUHMZD7PL65VRHRMO24BOVSBV5H3BQRSL";
+    /// Classic Stellar testnet keypair — round-trips through `strkey_*`.
+    /// Public key is the canonical Ed25519 point derived from the seed;
+    /// signing and verifying should never produce a different public key.
+    const FIXTURE_SECRET: &str = "SAVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCUKRKFIVCVLG5";
+    const FIXTURE_PUBLIC: &str = "GAMX62ZD4FWIKMWGVPEDR6WNL2TYTPQMO2ZJEAZUAON7VCZ5G2GWDF7W";
 
     fn fixture_request() -> SigningRequest {
         SigningRequest {
@@ -545,10 +523,12 @@ mod tests {
 
     #[test]
     fn test_strkey_decode_rejects_invalid_or_short() {
-        // 56 chars but containing the digit `0`, which is outside the alphabet.
-        let with_zero = format!("{}0", &FIXTURE_PUBLIC[..55]);
         assert!(
-            strkey_decode(&with_zero, "public").is_err(),
+            strkey_decode(
+                "GBZXVMIRWXL5VZVKXWV2FGKYTQ5VV5VRNJYQVZKYWW3XYVYP3IXGKD0",
+                "public"
+            )
+            .is_err(),
             "digit `0` must be rejected by Crockford decoder"
         );
         assert!(
@@ -582,7 +562,10 @@ mod tests {
         let req = fixture_request();
         let mut signed = req.sign_server_side(FIXTURE_SECRET).unwrap();
         signed.transaction_xdr.push_str("tampered");
-        assert!(!signed.verify().unwrap(), "XDR tamper must fail verification");
+        assert!(
+            !signed.verify().unwrap(),
+            "XDR tamper must fail verification"
+        );
     }
 
     #[test]
@@ -600,7 +583,8 @@ mod tests {
         let req = fixture_request();
         // Sign with one secret, then swap in an unrelated public key.
         let mut signed = req.sign_server_side(FIXTURE_SECRET).unwrap();
-        signed.signer_public_key = OTHER_PUBLIC.to_string();
+        signed.signer_public_key =
+            "GCT7NX5PR44LRG5IZZSJWWKPSHSNAH64K744SSJ56Q5V4UFJTBZWOOJ6".to_string();
         assert!(!signed.verify().unwrap());
     }
 
@@ -634,7 +618,10 @@ mod tests {
     fn test_sign_server_side_different_keys_differ() {
         let req = fixture_request();
         let sig1 = req.sign_server_side(FIXTURE_SECRET).unwrap().signature;
-        let sig2 = req.sign_server_side(OTHER_SECRET).unwrap().signature;
+        let sig2 = req
+            .sign_server_side("SBRWGY3DMNRWGY3DMNRWGY3DMNRWGY3DMNRWGY3DMNRWGY3DMNRWGK3F")
+            .unwrap()
+            .signature;
         assert_ne!(sig1, sig2);
     }
 
@@ -668,7 +655,10 @@ mod tests {
         assert_eq!(restored.signature, signed.signature);
         assert_eq!(restored.signer_public_key, signed.signer_public_key);
         assert_eq!(restored.algorithm, signed.algorithm);
-        assert!(restored.verify().unwrap(), "restored payload must still verify");
+        assert!(
+            restored.verify().unwrap(),
+            "restored payload must still verify"
+        );
     }
 
     #[test]

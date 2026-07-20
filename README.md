@@ -235,9 +235,9 @@ cargo test --workspace
 > The commands below match `crates/tools/src/main.rs` and the canonical
 > status table in
 > [`docs/deployment.md`](docs/deployment.md#known-limitations--cli-status).
-> `deploy` and `account` are currently stubs in the CLI binary;
-> use the native `stellar contract …` commands or `make deploy-testnet`
-> instead. `invoke` is fully implemented (see below).
+> `account` is currently a stub in the CLI binary; use the native
+> `stellar contract …` commands instead. `deploy` (#135) and `invoke` (#136)
+> are fully implemented (see below).
 > `config init`, `contract-id`, `build-donation-tx`, `submit-tx`,
 > `verify-tx`, `prepare-wallet-signing`, and `complete-wallet-signing`
 > shown in older docs are **not implemented** — see issue
@@ -337,10 +337,9 @@ SOROBAN_ADMIN_KEY=GA7...
 
 ### Step 3: Deploy to Testnet
 
-> The in-CLI `deploy` command is a stub today. Use the build-in Makefile
-> target (or `scripts/deploy.sh`) which is wired into `stellar contract deploy`
-> for real network output. Tracking: issue
-> [#37](https://github.com/OrbitChainLabs/OrbitChain-Contracts/issues/37).
+> `orbitchain-cli deploy <network>` is a Rust mirror of `scripts/deploy.sh`
+> (#135). The Makefile target below is kept for back-compat and remains the
+> quickest path for a standard testnet deploy.
 
 ```bash
 # Deploy via the Makefile wrapper (uses scripts/deploy.sh + stellar-cli)
@@ -430,7 +429,7 @@ stellar contract invoke \
 
 - **"WASM file not found"**: Run `make build-wasm` to build the contracts first.
 - **"Unknown command" or "coming soon"**: You ran an `orbitchain-cli` command
-  that is still a stub (`deploy`, `account`). Run
+  that is still a stub (`account`). Run
   `cargo run -p orbitchain-tools` with no arguments to see which commands are
   actually implemented, and follow
   [`docs/deployment.md`](docs/deployment.md#known-limitations--cli-status).
