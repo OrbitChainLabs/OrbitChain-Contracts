@@ -3,58 +3,192 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
   <title>OrbitChain – Wallet Connect</title>
   <style>
-    body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #f0f4ff; }
-    .card { background: #fff; border-radius: 12px; padding: 2rem 2.5rem; box-shadow: 0 4px 20px rgba(0,0,0,.1); text-align: center; min-width: 320px; max-width: 90vw; }
-    h1 { margin: 0 0 1.5rem; font-size: 1.4rem; color: #1a1a2e; }
-    #connect-btn { background: #5b6af0; color: #fff; border: none; border-radius: 8px; padding: .75rem 1.75rem; font-size: 1rem; cursor: pointer; transition: background .2s; }
-    #connect-btn:hover { background: #4451d4; }
-    #connect-btn:disabled { background: #a0a8f8; cursor: default; }
-    #wallet-info { margin-top: 1.25rem; display: none; }
-    #wallet-info p { margin: .4rem 0; color: #444; font-size: .9rem; }
-    #wallet-address { font-family: monospace; font-size: .85rem; word-break: break-all; background: #f5f5f5; padding: .5rem .75rem; border-radius: 6px; color: #222; }
-    #status { margin-top: .75rem; font-size: .85rem; color: #888; }
-    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #4caf50; margin-right: 6px; }
+    /* Theme tokens. Both palettes meet WCAG AA: body/label text >= 7:1,
+       button text >= 6:1, focus ring >= 3:1 against the surface it sits on. */
+    :root {
+      color-scheme: light dark;
+      --bg: #f0f4ff;
+      --card-bg: #ffffff;
+      --heading: #1a1a2e;
+      --text: #3d3d4d;
+      --muted: #575766;          /* 7.0:1 on --card-bg */
+      --accent: #4451d4;         /* 6.2:1 with white text */
+      --accent-hover: #333fb8;
+      --accent-text: #ffffff;
+      --focus-ring: #1a1a2e;     /* 15.9:1 on card, 14.5:1 on bg */
+      --error: #b3261e;          /* 6.6:1 on --card-bg */
+      --ok: #1b7a3d;             /* 4.9:1 on --card-bg */
+      --code-bg: #eef0f6;
+      --code-text: #1a1a2e;
+      --border: #9aa0b5;
+      --option-bg: #fafbff;
+      --option-border: #c9cde4;
+      --option-hover: #eef0ff;
+      --overlay: rgba(20, 20, 40, .45);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #12141f;
+        --card-bg: #1e2130;
+        --heading: #f2f3fa;
+        --text: #d5d8e6;
+        --muted: #aab0c5;        /* 7.3:1 on --card-bg */
+        --accent: #a9b2ff;       /* 8.9:1 with dark text */
+        --accent-hover: #c2c9ff;
+        --accent-text: #12142b;
+        --focus-ring: #cfd5ff;   /* 10.4:1 on card */
+        --error: #ffb4ab;        /* 8.7:1 on --card-bg */
+        --ok: #7edb9a;           /* 9.3:1 on --card-bg */
+        --code-bg: #12141f;
+        --code-text: #e8eaf5;
+        --border: #6a7190;
+        --option-bg: #262a3d;
+        --option-border: #4a5070;
+        --option-hover: #303550;
+        --overlay: rgba(0, 0, 0, .6);
+      }
+    }
 
-    /* Mobile wallet picker */
-    #wallet-picker-overlay { display: none; position: fixed; inset: 0; background: rgba(20,20,40,.45); align-items: center; justify-content: center; padding: 1rem; z-index: 10; }
+    body {
+      font-family: sans-serif;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      min-height: 100vh; margin: 0;
+      background: var(--bg); color: var(--text);
+    }
+    .card {
+      background: var(--card-bg); border-radius: 12px; padding: 2rem 2.5rem;
+      box-shadow: 0 4px 20px rgba(0,0,0,.15); text-align: center;
+      min-width: 320px; max-width: 90vw;
+    }
+    h1 { margin: 0 0 1.5rem; font-size: 1.4rem; color: var(--heading); }
+
+    button {
+      background: var(--accent); color: var(--accent-text);
+      border: 1px solid transparent; border-radius: 8px;
+      padding: .75rem 1.75rem; font-size: 1rem; cursor: pointer;
+    }
+    button:hover { background: var(--accent-hover); }
+    button[disabled] { opacity: .55; cursor: default; }
+    button.secondary {
+      background: transparent; color: var(--heading); border-color: var(--border);
+    }
+
+    /* Visible focus indicator (>= 3:1 against every surface it appears on). */
+    :focus-visible {
+      outline: 2px solid var(--focus-ring);
+      outline-offset: 2px;
+      border-radius: 4px;
+    }
+
+    /* Motion is opt-in: only animate for users who have not asked for reduced motion. */
+    @media (prefers-reduced-motion: no-preference) {
+      button { transition: background .2s, color .2s; }
+    }
+
+    @media (prefers-contrast: more) {
+      button { border-color: currentColor; }
+      :focus-visible { outline-width: 3px; }
+    }
+
+    #wallet-info { margin-top: 1.25rem; display: none; text-align: left; }
+    #wallet-info p { margin: .4rem 0; font-size: .9rem; }
+    .connected-flag { color: var(--ok); font-weight: 600; }
+    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); margin-right: 6px; }
+    #wallet-address {
+      font-family: monospace; font-size: .85rem; word-break: break-all;
+      background: var(--code-bg); color: var(--code-text);
+      padding: .5rem .75rem; border-radius: 6px; display: block;
+    }
+
+    /* Desktop manual-entry fallback (replaces the old window.prompt()). */
+    #manual-form { margin-top: 1.25rem; display: none; text-align: left; }
+    #manual-form label { display: block; font-size: .9rem; font-weight: 600; color: var(--heading); margin-bottom: .3rem; }
+    #manual-form .hint { font-size: .8rem; color: var(--muted); margin: 0 0 .5rem; }
+    #manual-address {
+      width: 100%; box-sizing: border-box; font-family: monospace; font-size: .85rem;
+      padding: .55rem .6rem; border: 1px solid var(--border); border-radius: 6px;
+      background: var(--card-bg); color: var(--text);
+    }
+    .form-actions { margin-top: .75rem; display: flex; gap: .5rem; }
+    .form-actions button { padding: .55rem 1.1rem; font-size: .9rem; }
+
+    #status { margin-top: .75rem; font-size: .9rem; color: var(--muted); min-height: 1.2em; }
+    #status.is-error { color: var(--error); font-weight: 600; }
+
+    /* Mobile wallet picker (modal dialog) */
+    #wallet-picker-overlay { display: none; position: fixed; inset: 0; background: var(--overlay); align-items: center; justify-content: center; padding: 1rem; z-index: 10; }
     #wallet-picker-overlay.open { display: flex; }
-    #wallet-picker { background: #fff; border-radius: 12px; padding: 1.5rem; width: 320px; max-width: 100%; text-align: left; }
-    #wallet-picker h2 { margin: 0 0 .25rem; font-size: 1.1rem; color: #1a1a2e; }
-    #wallet-picker .hint { margin: 0 0 1rem; font-size: .8rem; color: #888; }
-    .wallet-option { display: flex; align-items: center; gap: .6rem; width: 100%; padding: .65rem .75rem; margin-bottom: .5rem; border: 1px solid #e2e4f5; border-radius: 8px; background: #fafbff; cursor: pointer; font-size: .95rem; color: #1a1a2e; }
-    .wallet-option:hover { background: #eef0ff; border-color: #5b6af0; }
+    #wallet-picker { background: var(--card-bg); border-radius: 12px; padding: 1.5rem; width: 320px; max-width: 100%; text-align: left; }
+    #wallet-picker h2 { margin: 0 0 .25rem; font-size: 1.1rem; color: var(--heading); }
+    #wallet-picker .hint { margin: 0 0 1rem; font-size: .8rem; color: var(--muted); }
+    .wallet-option { display: flex; align-items: center; gap: .6rem; width: 100%; padding: .65rem .75rem; margin-bottom: .5rem; border: 1px solid var(--option-border); border-radius: 8px; background: var(--option-bg); cursor: pointer; font-size: .95rem; color: var(--heading); }
+    .wallet-option:hover { background: var(--option-hover); border-color: var(--accent); }
     .wallet-option .icon { font-size: 1.2rem; }
-    #pubkey-input { width: 100%; box-sizing: border-box; padding: .6rem .7rem; border: 1px solid #d7dae8; border-radius: 8px; font-family: monospace; font-size: .82rem; margin: .5rem 0 .75rem; display: none; }
-    #wallet-picker-cancel { background: none; border: none; color: #888; font-size: .85rem; cursor: pointer; margin-top: .25rem; }
+    #pubkey-field { display: none; margin: .5rem 0 .75rem; }
+    #pubkey-field label { display: block; font-size: .85rem; font-weight: 600; color: var(--heading); margin-bottom: .3rem; }
+    #pubkey-input { width: 100%; box-sizing: border-box; padding: .6rem .7rem; border: 1px solid var(--border); border-radius: 8px; font-family: monospace; font-size: .82rem; background: var(--card-bg); color: var(--text); }
+    #wallet-picker-cancel { background: none; border: 1px solid transparent; color: var(--muted); font-size: .85rem; cursor: pointer; margin-top: .25rem; padding: .35rem .6rem; }
+    #wallet-picker-cancel:hover { color: var(--heading); background: none; }
   </style>
 </head>
 <body>
-  <div class="card">
-    <h1>🌟 OrbitChain Wallet Connect</h1>
-    <button id="connect-btn" onclick="connectWallet()">Connect Wallet</button>
+  <main class="card">
+    <h1><span aria-hidden="true">🌟</span> OrbitChain Wallet Connect</h1>
+    <button id="connect-btn" type="button" onclick="connectWallet()">Connect Wallet</button>
 
     <div id="wallet-info">
-      <p><span class="dot"></span><strong>Wallet Connected</strong></p>
-      <p>Address:</p>
-      <div id="wallet-address"></div>
+      <p class="connected-flag"><span class="dot" aria-hidden="true"></span><strong>Wallet Connected</strong></p>
+      <p id="address-label">Address:</p>
+      <div id="wallet-address" role="note" aria-labelledby="address-label"></div>
     </div>
 
-    <p id="status"></p>
-  </div>
+    <!-- Desktop fallback: accessible inline form instead of window.prompt(),
+         so manual entry has real label/error semantics and keyboard focus flow. -->
+    <form id="manual-form" novalidate>
+      <label for="manual-address">Stellar public key</label>
+      <p class="hint" id="manual-address-hint">
+        Freighter was not detected. Enter your public key manually — it starts
+        with G and is 56 characters long.
+      </p>
+      <input
+        id="manual-address"
+        name="manual-address"
+        type="text"
+        autocomplete="off"
+        spellcheck="false"
+        aria-describedby="manual-address-hint"
+        aria-required="true"
+      />
+      <div class="form-actions">
+        <button type="submit">Use this address</button>
+        <button type="button" class="secondary" id="manual-cancel">Cancel</button>
+      </div>
+    </form>
+
+    <!-- Single live region: progress and errors are both announced from here.
+         Errors are written verbatim with a plain "Error:" prefix. -->
+    <p id="status" role="status" aria-live="polite"></p>
+
+    <noscript><p>This page requires JavaScript to connect a wallet.</p></noscript>
+  </main>
 
   <!-- Mobile wallet picker: shown instead of the Freighter path when
        OrbitWalletConnect.isMobile() is true. See wallet_connect.js and
        docs/tutorials/dapp-integration.md for the SEP-10 / SEP-0007 flow. -->
   <div id="wallet-picker-overlay">
-    <div id="wallet-picker">
-      <h2>Choose a wallet</h2>
-      <p class="hint">Detected mobile device. Pick your Stellar wallet to continue.</p>
+    <div id="wallet-picker" role="dialog" aria-modal="true" aria-labelledby="wallet-picker-title" aria-describedby="wallet-picker-hint">
+      <h2 id="wallet-picker-title">Choose a wallet</h2>
+      <p class="hint" id="wallet-picker-hint">Detected mobile device. Pick your Stellar wallet to continue.</p>
       <div id="wallet-options"></div>
-      <input id="pubkey-input" type="text" placeholder="Paste your Stellar public key (G…)" />
+      <div id="pubkey-field">
+        <label for="pubkey-input">Stellar public key</label>
+        <input id="pubkey-input" type="text" autocomplete="off" spellcheck="false" aria-required="true" placeholder="G…" />
+      </div>
       <div>
-        <button id="wallet-picker-cancel" onclick="closeWalletPicker()">Cancel</button>
+        <button id="wallet-picker-cancel" type="button" onclick="closeWalletPicker(true)">Cancel</button>
       </div>
     </div>
   </div>
@@ -66,14 +200,36 @@
     const walletAddress = document.getElementById('wallet-address');
     const status = document.getElementById('status');
     const pickerOverlay = document.getElementById('wallet-picker-overlay');
+    const picker = document.getElementById('wallet-picker');
     const walletOptions = document.getElementById('wallet-options');
+    const pubkeyField = document.getElementById('pubkey-field');
     const pubkeyInput = document.getElementById('pubkey-input');
+    const manualForm = document.getElementById('manual-form');
+    const manualInput = document.getElementById('manual-address');
+    const manualCancel = document.getElementById('manual-cancel');
 
     let selectedWallet = null;
 
+    function setStatus(message) {
+      status.classList.remove('is-error');
+      status.textContent = message;
+    }
+
+    // Errors share the #status live region (announced politely, read
+    // verbatim) with a plain-text prefix instead of an emoji.
+    function setError(message) {
+      status.classList.add('is-error');
+      status.textContent = 'Error: ' + message;
+    }
+
+    function isValidPublicKey(addr) {
+      return typeof addr === 'string' && /^G[A-Z2-7]{55}$/.test(addr);
+    }
+
     async function connectWallet() {
-      status.textContent = 'Connecting…';
+      setStatus('Connecting…');
       btn.disabled = true;
+      btn.setAttribute('aria-busy', 'true');
 
       try {
         if (OrbitWalletConnect.isMobile()) {
@@ -89,45 +245,105 @@
           const { address } = await window.freighter.getAddress();
           showConnected(address);
         } else {
-          // Fallback: prompt for manual address entry (dev/demo mode)
-          const addr = prompt('Freighter not detected.\nEnter your Stellar public key to continue:');
-          if (addr && addr.startsWith('G') && addr.length === 56) {
-            showConnected(addr);
-          } else {
-            throw new Error('Invalid or cancelled address input.');
-          }
+          // Fallback: accessible manual entry (dev/demo mode)
+          openManualForm();
         }
       } catch (err) {
-        status.textContent = '❌ ' + err.message;
-        btn.disabled = false;
+        setError(err.message);
+        resetConnectButton();
       }
     }
 
-    // ── Mobile wallet picker ──────────────────────────────────────────────
+    function resetConnectButton() {
+      btn.disabled = false;
+      btn.removeAttribute('aria-busy');
+    }
+
+    // ── Desktop manual-entry fallback ─────────────────────────────────────
+    function openManualForm() {
+      btn.setAttribute('aria-busy', 'false');
+      manualForm.style.display = 'block';
+      setStatus('Freighter not detected. Enter your Stellar public key below.');
+      manualInput.focus();
+    }
+
+    function closeManualForm() {
+      manualForm.style.display = 'none';
+      manualInput.value = '';
+      resetConnectButton();
+    }
+
+    manualForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const addr = manualInput.value.trim();
+      if (isValidPublicKey(addr)) {
+        closeManualForm();
+        showConnected(addr);
+      } else {
+        setError('Enter a valid Stellar public key (starts with G, 56 chars).');
+        manualInput.focus();
+      }
+    });
+
+    manualCancel.addEventListener('click', () => {
+      closeManualForm();
+      setStatus('Connection cancelled.');
+      btn.focus();
+    });
+
+    // ── Mobile wallet picker (modal dialog semantics) ─────────────────────
     function openWalletPicker() {
       walletOptions.innerHTML = '';
       OrbitWalletConnect.walletsFor('mobile').forEach((wallet) => {
         const el = document.createElement('button');
+        el.type = 'button';
         el.className = 'wallet-option';
-        el.innerHTML = `<span class="icon">${wallet.icon}</span><span>${wallet.name}</span>`;
+        el.innerHTML = `<span class="icon" aria-hidden="true">${wallet.icon}</span><span>${wallet.name}</span>`;
         el.onclick = () => selectWallet(wallet);
         walletOptions.appendChild(el);
       });
       pickerOverlay.classList.add('open');
-      status.textContent = '';
+      btn.removeAttribute('aria-busy');
+      setStatus('');
+      const firstOption = walletOptions.querySelector('button');
+      if (firstOption) firstOption.focus();
     }
 
-    function closeWalletPicker() {
+    function closeWalletPicker(refocus) {
       pickerOverlay.classList.remove('open');
-      pubkeyInput.style.display = 'none';
+      pubkeyField.style.display = 'none';
       pubkeyInput.value = '';
       selectedWallet = null;
-      btn.disabled = false;
+      resetConnectButton();
+      if (refocus) btn.focus();
     }
+
+    // Keep keyboard focus inside the open dialog; Escape closes it.
+    pickerOverlay.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeWalletPicker(true);
+        setStatus('Connection cancelled.');
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const focusables = Array.from(
+        picker.querySelectorAll('button, input')
+      ).filter((el) => el.offsetParent !== null && !el.disabled);
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    });
 
     function selectWallet(wallet) {
       selectedWallet = wallet;
-      pubkeyInput.style.display = 'block';
+      pubkeyField.style.display = 'block';
       pubkeyInput.focus();
       pubkeyInput.onkeydown = (e) => {
         if (e.key === 'Enter') confirmMobileConnect();
@@ -135,6 +351,7 @@
       // Replace the option list with a single confirm affordance.
       walletOptions.innerHTML = `<p class="hint">Connecting with <strong>${wallet.name}</strong>. Enter the public key to authenticate, then continue in the app.</p>`;
       const confirmBtn = document.createElement('button');
+      confirmBtn.type = 'button';
       confirmBtn.className = 'wallet-option';
       confirmBtn.textContent = 'Continue to ' + wallet.name;
       confirmBtn.onclick = confirmMobileConnect;
@@ -144,25 +361,27 @@
     async function confirmMobileConnect() {
       if (!selectedWallet) return;
       try {
-        status.textContent = 'Requesting SEP-10 challenge…';
+        setStatus('Requesting SEP-10 challenge…');
         await OrbitWalletConnect.startMobileConnect(selectedWallet, pubkeyInput.value.trim());
         // startMobileConnect() redirects the browser to the wallet app; if we
         // reach this line the redirect didn't happen (e.g. blocked), so the
         // picker stays open for the user to retry.
       } catch (err) {
-        status.textContent = '❌ ' + err.message;
+        setError(err.message);
         btn.disabled = false;
       }
     }
 
     function showConnected(address) {
-      closeWalletPicker();
+      closeWalletPicker(false);
+      closeManualForm();
       walletAddress.textContent = address;
       walletInfo.style.display = 'block';
       btn.textContent = 'Disconnect';
       btn.onclick = disconnectWallet;
-      btn.disabled = false;
-      status.textContent = '';
+      resetConnectButton();
+      setStatus('Wallet connected.');
+      btn.focus();
     }
 
     function disconnectWallet() {
@@ -170,14 +389,15 @@
       walletAddress.textContent = '';
       btn.textContent = 'Connect Wallet';
       btn.onclick = connectWallet;
-      status.textContent = 'Disconnected.';
+      setStatus('Disconnected.');
+      btn.focus();
     }
 
     // ── Resume the mobile deep-link flow on return from the wallet app ────
     (function resumeMobileReturnIfAny() {
       const result = OrbitWalletConnect.handleMobileReturn();
       if (!result) return;
-      status.textContent = 'Verifying signed challenge…';
+      setStatus('Verifying signed challenge…');
       btn.disabled = true;
       result
         .then(({ token }) => {
@@ -185,8 +405,8 @@
           showConnected(address || '(see session token)');
         })
         .catch((err) => {
-          status.textContent = '❌ ' + err.message;
-          btn.disabled = false;
+          setError(err.message);
+          resetConnectButton();
         });
     })();
 
