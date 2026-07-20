@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "campaign",
     "common",
+    "crates/contracts/batch-donor",
     "crates/contracts/core",
     "crates/tools",
     "token-bridge",

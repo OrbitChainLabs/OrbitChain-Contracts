@@ -16,7 +16,7 @@ build: build-wasm build-tools
 # Build WASM contract
 build-wasm:
 	@echo "🔨 Building Soroban contract..."
-	cargo build -p orbitchain-core -p orbitchain-campaign -p orbitchain-token-bridge -p orbitchain-common --target wasm32v1-none --release
+	cargo build -p orbitchain-core -p orbitchain-campaign -p orbitchain-token-bridge -p orbitchain-batch-donor -p orbitchain-common --target wasm32v1-none --release
 	@echo "✅ WASM contracts built successfully"
 
 # Build CLI tools

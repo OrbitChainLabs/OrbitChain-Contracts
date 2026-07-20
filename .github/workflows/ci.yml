@@ -25,6 +25,7 @@ env:
   CONTRACTS: >-
     -p orbitchain-campaign
     -p orbitchain-common
+    -p orbitchain-batch-donor
     -p orbitchain-core
     -p orbitchain-token-bridge
 

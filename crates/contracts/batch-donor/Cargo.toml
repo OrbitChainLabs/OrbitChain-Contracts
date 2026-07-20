@@ -1,0 +1,15 @@
+[package]
+name = "orbitchain-batch-donor"
+version = "0.1.0"
+edition = "2021"
+description = "OrbitChain batch-donor contract — atomic multi-campaign donations in a single Soroban transaction. Closes #147."
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+soroban-sdk = { workspace = true }
+common = { workspace = true }
+
+[dev-dependencies]
+soroban-sdk = { version = "26.0.1", features = ["testutils"] }
