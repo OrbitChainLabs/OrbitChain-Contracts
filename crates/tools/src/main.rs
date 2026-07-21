@@ -24,6 +24,7 @@ use orbitchain_tools::asset_issuing::{
 use orbitchain_tools::deploy;
 use orbitchain_tools::encrypted_vault::EncryptedVault;
 use orbitchain_tools::environment_config::EnvironmentConfig;
+use orbitchain_tools::error_mapper::ErrorMapper;
 use orbitchain_tools::key_manager::KeyManager;
 use orbitchain_tools::keypair_manager::{AccountFunding, DistributionAccount, MasterKeypair};
 use orbitchain_tools::response_handler::ResponseHandler;
@@ -156,6 +157,7 @@ fn dispatch(command: &str, args: &[String]) -> Result<()> {
         "keypair" => handle_keypair(&args[2..]),
         "signing" => handle_signing(&args[2..]),
         "response" => handle_response(&args[2..]),
+        "errors" => handle_errors(&args[2..]),
         _ => {
             println!("❌ Unknown command: {}", command);
             println!();
@@ -191,6 +193,7 @@ fn print_available_commands() {
     println!("  signing <cmd>         - Build donation/campaign/custom signing requests");
     println!("  response <cmd>        - Process/validate/save signed wallet responses");
     println!("  deploy [net] [--wasm P] [--force] - Deploy the core contract (Rust mirror of scripts/deploy.sh)");
+    println!("  errors <cmd>          - Map error codes to human-readable messages (list|json)");
     println!();
     println!("Stubs (no-op placeholders, do not rely on in production):");
     println!("  invoke <method>       - Stub. Use `stellar contract invoke` natively.");
@@ -964,6 +967,74 @@ fn handle_response(args: &[String]) -> Result<()> {
         _ => {
             println!("Unknown response command: {}", args[0]);
             handle_response(&[])?;
+        }
+    }
+
+    Ok(())
+}
+
+fn handle_errors(args: &[String]) -> Result<()> {
+    if args.is_empty() {
+        println!("❌ Error Code Mapper");
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        println!("Usage: orbitchain-cli errors <command>");
+        println!();
+        println!("Commands:");
+        println!("  list       - List all error codes with names and messages");
+        println!("  json       - Export all error codes as a JSON array");
+        println!("  lookup <n> - Look up a single error code by number");
+        return Ok(());
+    }
+
+    let mapper = ErrorMapper::load_builtin();
+
+    match args[0].as_str() {
+        "list" => {
+            println!("📋 Campaign Error Codes ({} total)", mapper.count());
+            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            println!("{:>4}  {:<35}  Message", "Code", "Name");
+            println!(
+                "{:>4}  {:<35}  ──────────────────────────────────────────────",
+                "────", "───────────────────────────────────"
+            );
+            for entry in mapper.all_entries() {
+                println!("{:>4}  {:<35}  {}", entry.code, entry.name, entry.message);
+            }
+        }
+        "json" => match mapper.to_json_array() {
+            Ok(json) => println!("{json}"),
+            Err(e) => println!("❌ Failed to serialise error map: {e}"),
+        },
+        "lookup" => {
+            if args.len() < 2 {
+                println!("Usage: orbitchain-cli errors lookup <error_code>");
+                return Ok(());
+            }
+            let code: u32 = match args[1].parse() {
+                Ok(c) => c,
+                Err(_) => {
+                    println!("❌ Invalid error code: {}", args[1]);
+                    return Ok(());
+                }
+            };
+            match mapper.get(code) {
+                Some(entry) => {
+                    println!("🔎 Error Code {}", code);
+                    println!("━━━━━━━━━━━━━━━━━━━━━━");
+                    println!("Name:     {}", entry.name);
+                    println!("Message:  {}", entry.message);
+                    if let Some(ref severity) = entry.severity {
+                        println!("Severity: {}", severity);
+                    }
+                }
+                None => {
+                    println!("❌ Unknown error code: {}", code);
+                }
+            }
+        }
+        _ => {
+            println!("❌ Unknown errors command: {}", args[0]);
+            handle_errors(&[])?;
         }
     }
 

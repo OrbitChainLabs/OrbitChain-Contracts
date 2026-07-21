@@ -112,6 +112,10 @@ pub enum Error {
     // ── Upgrade / freeze ─────────────────────────────────────────────────── 8x
     /// Contract is frozen; all mutating operations are blocked.
     ContractFrozen = 80,
+
+    // ── Asset block ───────────────────────────────────────────────────── 9x
+    /// Donations in this asset are blocked by the admin.
+    AssetBlocked = 90,
 }
 
 #[cfg(test)]
@@ -162,6 +166,7 @@ mod error_code_tests {
             Error::ReentrantCall as u32,
             Error::InvalidAmount as u32,
             Error::ContractFrozen as u32,
+            Error::AssetBlocked as u32,
         ];
         for (index, code) in campaign_codes.iter().enumerate() {
             assert!(!campaign_codes[index + 1..].contains(code));
@@ -308,6 +313,11 @@ pub enum DataKey {
     /// unlock burst is one read + one write instead of N of each. Appended at
     /// the end of the enum so existing key encodings are untouched.
     MilestonesVec,
+
+    // ── Persistent (appended — issue #90) ───────────────────────────────────
+    /// Per-asset block list keyed by token contract address.
+    /// Present = asset is blocked; absent = not blocked.
+    BlockedAsset(Address),
 }
 
 // ─── Asset types ──────────────────────────────────────────────────────────────

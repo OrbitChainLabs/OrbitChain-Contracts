@@ -1,0 +1,16 @@
+[package]
+name = "orbitchain-testkit"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Shared test utilities and proptest strategies for OrbitChain contracts"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+orbitchain-campaign = { path = "../../campaign" }
+
+[dev-dependencies]
+proptest = { version = "1.5", default-features = true, features = ["std"] }

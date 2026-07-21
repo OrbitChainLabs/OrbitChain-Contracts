@@ -7,6 +7,9 @@ description = "OrbitChain campaign smart contract — milestones, donations, ref
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+[features]
+test-backend = []
+
 [dependencies]
 soroban-sdk = { workspace = true }
 common = { workspace = true }
