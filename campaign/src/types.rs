@@ -318,6 +318,12 @@ pub enum DataKey {
     /// Per-asset block list keyed by token contract address.
     /// Present = asset is blocked; absent = not blocked.
     BlockedAsset(Address),
+
+    // ── Persistent (appended — issue #121) ──────────────────────────────────
+    /// Dashboard report memoised at state-change time (issue #121), so polling
+    /// clients read one entry instead of recomputing from campaign +
+    /// milestones + counters on every call.
+    CachedReport,
 }
 
 // ─── Asset types ──────────────────────────────────────────────────────────────

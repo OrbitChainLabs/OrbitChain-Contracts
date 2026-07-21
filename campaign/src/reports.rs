@@ -32,7 +32,7 @@ pub(crate) fn calculate_refund_amount(
 }
 
 use crate::storage::{
-    get_campaign, storage_get_donation_count, storage_get_release_count,
+    get_campaign, set_cached_report_storage, storage_get_donation_count, storage_get_release_count,
     storage_get_unique_donor_count,
 };
 use crate::types::{CampaignData, CampaignReport};
@@ -42,6 +42,16 @@ pub(crate) fn active_campaign_count(env: &Env) -> u64 {
     match get_campaign(env) {
         Some(campaign) if campaign.status.accepts_donations() => 1,
         _ => 0,
+    }
+}
+
+/// Issue #121 – Recompute and store the memoised dashboard report. Called at
+/// the tail of every state-changing entrypoint. Freeze/unfreeze and the asset
+/// block list are excluded: neither changes a `CampaignReport` field.
+pub(crate) fn refresh_report_cache(env: &Env) {
+    if let Some(campaign) = get_campaign(env) {
+        let report = build_campaign_report(env, campaign);
+        set_cached_report_storage(env, &report);
     }
 }
 
