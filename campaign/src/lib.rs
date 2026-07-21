@@ -25,6 +25,7 @@
 // the warning keeps CI clean without changing the published event topics.
 #![allow(deprecated)]
 
+pub mod asset_auth;
 pub mod backend;
 pub mod contract;
 pub mod event;
@@ -187,6 +188,16 @@ impl CampaignContract {
         // Issue #242 – Reentrancy protection: acquire lock
         acquire_lock(&env);
 
+        // Load campaign early so asset whitelist can be checked before auth
+        // or any state mutations (issue #89).
+        let mut campaign: CampaignData =
+            get_campaign(&env).unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
+
+        // Issue #89 – Defence-in-depth: reject unauthorised assets before auth
+        // or storage writes.  Even if a later guard is accidentally removed,
+        // this early check guarantees the asset was in `accepted_assets`.
+        asset_auth::assert_asset_is_accepted(&env, &asset, &campaign);
+
         // Issue #243 – Authorization check
         donor.require_auth();
 
@@ -194,9 +205,6 @@ impl CampaignContract {
         if is_frozen(&env) {
             panic_with_error(&env, Error::ContractFrozen);
         }
-
-        let mut campaign: CampaignData =
-            get_campaign(&env).unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
 
         // Issue #194 – status check: only Active or GoalReached campaigns accept donations
         match campaign.status {
@@ -696,6 +704,18 @@ impl CampaignContract {
         event::contract_unfrozen(&env, &campaign.creator, timestamp);
     }
 
+    /// Issue #175 – assert the current invoker is the campaign creator.
+    ///
+    /// Reads the creator address from campaign storage and calls `require_auth()`.
+    /// Panics with `Error::Unauthorized` if the campaign is not initialized;
+    /// Soroban's auth framework panics if the invoker is not the creator.
+    #[allow(dead_code)]
+    fn require_creator(env: &Env) {
+        let campaign =
+            get_campaign(env).unwrap_or_else(|| panic_with_error(env, Error::Unauthorized));
+        campaign.creator.require_auth();
+    }
+
     /// Issue #90 – Block an asset, preventing any new donations in that token.
     ///
     /// Only the admin (creator) can call this.
@@ -742,6 +762,14 @@ impl CampaignContract {
     /// Returns `false` if the flag has never been set for this asset.
     pub fn is_asset_blocked_view(env: Env, asset: Address) -> bool {
         is_asset_blocked(&env, &asset)
+    }
+
+    /// Issue #89 – Public view: check whether an asset is in the campaign's
+    /// accepted whitelist.  No auth required (read-only).
+    ///
+    /// Returns `false` if the campaign has not been initialised yet.
+    pub fn is_asset_accepted(env: Env, asset: AssetInfo) -> bool {
+        asset_auth::is_asset_accepted(&env, &asset)
     }
 }
 
