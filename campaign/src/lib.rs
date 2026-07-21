@@ -25,6 +25,7 @@
 // the warning keeps CI clean without changing the published event topics.
 #![allow(deprecated)]
 
+pub mod backend;
 pub mod contract;
 pub mod event;
 pub mod get_all_milestones;
