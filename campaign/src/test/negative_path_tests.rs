@@ -26,7 +26,6 @@ const BASE: u64 = 86400 * 365;
 fn make_env() -> Env {
     Env::default()
 }
-
 fn default_accepted_assets(env: &Env) -> Vec<StellarAsset> {
     let mut assets: Vec<StellarAsset> = Vec::new(env);
     assets.push_back(StellarAsset {

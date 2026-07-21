@@ -51,7 +51,6 @@ pub enum CoreError {
     /// The withdrawal amount must be greater than zero.
     InvalidWithdrawalAmount = 12,
 }
-
 // ── Storage key helpers ──────────────────────────────────────────────────────
 
 fn campaign_key(id: u64) -> (Symbol, u64) {

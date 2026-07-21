@@ -63,7 +63,6 @@ fn create_test_campaign(env: &Env, creator: &Address, milestone_count: u32) {
     };
     set_campaign(env, &campaign);
 }
-
 /// Initializes the mock SAC and mints tokens to the current contract address
 /// so that `balance()` and `transfer()` calls inside `release_milestone` don't
 /// panic with `Storage(MissingValue)` in the mock token.
