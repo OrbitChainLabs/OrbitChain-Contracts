@@ -704,15 +704,6 @@ impl CampaignContract {
         event::contract_unfrozen(&env, &campaign.creator, timestamp);
     }
 
-    /// Issue #89 – Public view: check whether an asset is in the campaign's
-    /// accepted whitelist.  No auth required (read-only).
-    ///
-    /// Returns `false` if the campaign has not been initialised yet.
-    pub fn is_asset_accepted(env: Env, asset: AssetInfo) -> bool {
-        asset_auth::is_asset_accepted(&env, &asset)
-    }
-}
-
 /// Issue #175 – assert the current invoker is the campaign creator.
 ///
 /// Reads the creator address from campaign storage and calls `require_auth()`.
@@ -797,6 +788,14 @@ fn get_token_address_for_asset(env: &Env, asset: &AssetInfo, campaign: &Campaign
     /// Returns `false` if the flag has never been set for this asset.
     pub fn is_asset_blocked_view(env: Env, asset: Address) -> bool {
         is_asset_blocked(&env, &asset)
+    }
+
+    /// Issue #89 – Public view: check whether an asset is in the campaign's
+    /// accepted whitelist.  No auth required (read-only).
+    ///
+    /// Returns `false` if the campaign has not been initialised yet.
+    pub fn is_asset_accepted(env: Env, asset: AssetInfo) -> bool {
+        asset_auth::is_asset_accepted(&env, &asset)
     }
 }
 
