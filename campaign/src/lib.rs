@@ -25,6 +25,10 @@
 // the warning keeps CI clean without changing the published event topics.
 #![allow(deprecated)]
 
+// Tests build hosted: std is available for snapshot/formatting helpers.
+#[cfg(test)]
+extern crate std;
+
 pub mod asset_auth;
 pub mod backend;
 pub mod contract;
@@ -829,6 +833,7 @@ mod test {
     pub mod asset_donor_index_tests;
     pub mod bump_storage_tests;
     pub mod claim_refund_tests;
+    pub mod event_snapshot_tests;
     pub mod get_campaign_status_tests;
     pub mod integration_tests;
     pub mod invariant_tests;

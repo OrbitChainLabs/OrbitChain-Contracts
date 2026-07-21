@@ -1,0 +1,102 @@
+---
+source: campaign/src/test/event_snapshot_tests.rs
+expression: log
+---
+== freeze ==
+ContractEvent {
+    ext: V0,
+    contract_id: Some(
+        ContractId(
+            Hash(0000000000000000000000000000000000000000000000000000000000000003),
+        ),
+    ),
+    type_: Contract,
+    body: V0(
+        ContractEventV0 {
+            topics: VecM(
+                [
+                    String(
+                        ScString(
+                            StringM(campaign),
+                        ),
+                    ),
+                    String(
+                        ScString(
+                            StringM(contract_frozen),
+                        ),
+                    ),
+                ],
+            ),
+            data: Vec(
+                Some(
+                    ScVec(
+                        VecM(
+                            [
+                                Address(
+                                    Contract(
+                                        ContractId(
+                                            Hash(0000000000000000000000000000000000000000000000000000000000000004),
+                                        ),
+                                    ),
+                                ),
+                                U64(
+                                    1000000,
+                                ),
+                            ],
+                        ),
+                    ),
+                ),
+            ),
+        },
+    ),
+}
+---
+== unfreeze ==
+ContractEvent {
+    ext: V0,
+    contract_id: Some(
+        ContractId(
+            Hash(0000000000000000000000000000000000000000000000000000000000000003),
+        ),
+    ),
+    type_: Contract,
+    body: V0(
+        ContractEventV0 {
+            topics: VecM(
+                [
+                    String(
+                        ScString(
+                            StringM(campaign),
+                        ),
+                    ),
+                    String(
+                        ScString(
+                            StringM(contract_unfrozen),
+                        ),
+                    ),
+                ],
+            ),
+            data: Vec(
+                Some(
+                    ScVec(
+                        VecM(
+                            [
+                                Address(
+                                    Contract(
+                                        ContractId(
+                                            Hash(0000000000000000000000000000000000000000000000000000000000000004),
+                                        ),
+                                    ),
+                                ),
+                                U64(
+                                    1000000,
+                                ),
+                            ],
+                        ),
+                    ),
+                ),
+            ),
+        },
+    ),
+}
+---

@@ -47,3 +47,7 @@ tarpaulin-ci/
 /playwright-report
 /test-results
 /blob-report
+
+# Soroban test observation artifacts — regenerated on every test run;
+# event-shape assertions live in insta snapshots instead (issue #115).
+campaign/test_snapshots/

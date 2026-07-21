@@ -17,3 +17,5 @@ common = { workspace = true }
 
 [dev-dependencies]
 soroban-sdk = { version = "26.0.1", features = ["testutils"] }
+# Issue #115: JSON/string snapshot assertions for emitted events.
+insta = "1"
