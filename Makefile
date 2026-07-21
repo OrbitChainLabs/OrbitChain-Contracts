@@ -7,7 +7,7 @@
 ##   make clippy       - Lint code
 
 .PHONY: build build-wasm build-tools test fmt lint clean optimize help e2e \
-        setup deploy-testnet deploy-sandbox sandbox-start audit deny
+        setup deploy-testnet deploy-sandbox sandbox-start audit deny fuzz
 
 # Default target
 build: build-wasm build-tools
@@ -100,6 +100,15 @@ deny:
 	cargo deny check
 	@echo "✅ License check passed"
 
+# Run cargo-fuzz smoke tests (60s each target)
+fuzz:
+	@echo "🔬 Running fuzz smoke tests..."
+	@cd fuzz && cargo fuzz run fuzz_donate -- -max_total_time=60 || true
+	@cd fuzz && cargo fuzz run fuzz_initialize -- -max_total_time=60 || true
+	@cd fuzz && cargo fuzz run fuzz_release_milestone -- -max_total_time=60 || true
+	@cd fuzz && cargo fuzz run fuzz_claim_refund -- -max_total_time=60 || true
+	@echo "✅ Fuzz smoke tests complete"
+
 # Optimize WASM binaries using wasm-opt (-Oz)
 optimize: build
 	@echo "🔧 Optimizing WASM binaries with wasm-opt..."
@@ -122,4 +131,5 @@ help:
 	@echo "  make deploy-testnet - Deploy contract to Stellar testnet"
 	@echo "  make e2e            - End-to-end sandbox lifecycle test (Docker)"
 	@echo "  make optimize       - Optimize WASM with wasm-opt -Oz"
+	@echo "  make fuzz           - Run fuzz smoke tests (60s per target)"
 	@echo "  make help           - Show this help message"

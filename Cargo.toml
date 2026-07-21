@@ -5,8 +5,12 @@ members = [
     "common",
     "crates/contracts/batch-donor",
     "crates/contracts/core",
+    "crates/testkit",
     "crates/tools",
     "token-bridge",
+]
+exclude = [
+    "fuzz",
 ]
 
 [workspace.package]

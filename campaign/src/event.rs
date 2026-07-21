@@ -100,3 +100,15 @@ pub fn contract_unfrozen(env: &Env, admin: &Address, timestamp: u64) {
     env.events()
         .publish(("campaign", "contract_unfrozen"), (admin, timestamp));
 }
+
+/// Issue #90 – Emitted when an asset is blocked by the admin.
+pub fn asset_blocked(env: &Env, admin: &Address, asset: &Address, timestamp: u64) {
+    env.events()
+        .publish(("campaign", "asset_blocked"), (admin, asset, timestamp));
+}
+
+/// Issue #90 – Emitted when an asset is unblocked by the admin.
+pub fn asset_unblocked(env: &Env, admin: &Address, asset: &Address, timestamp: u64) {
+    env.events()
+        .publish(("campaign", "asset_unblocked"), (admin, asset, timestamp));
+}
