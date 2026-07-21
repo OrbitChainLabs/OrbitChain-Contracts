@@ -76,8 +76,8 @@ fn is_asset_in_list(_env: &Env, asset: &AssetInfo, campaign: &CampaignData) -> b
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{CampaignStatus, StellarAsset};
     use crate::test::with_contract;
+    use crate::types::{CampaignStatus, StellarAsset};
     use soroban_sdk::{testutils::Address as _, Address, Env, String, Vec};
 
     fn make_campaign(env: &Env, accepted_assets: Vec<StellarAsset>) -> CampaignData {
@@ -276,20 +276,11 @@ mod tests {
             );
 
             // Attempt to inject a fake DonorAssetDonation for the unknown asset
-            crate::storage::increment_donor_asset_donation(
-                &env,
-                &donor,
-                &unknown,
-                500,
-            );
+            crate::storage::increment_donor_asset_donation(&env, &donor, &unknown, 500);
 
             // The early guard must still reject the unknown asset
             let campaign = get_campaign(&env).unwrap();
-            assert_asset_is_accepted(
-                &env,
-                &AssetInfo::Stellar(unknown),
-                &campaign,
-            );
+            assert_asset_is_accepted(&env, &AssetInfo::Stellar(unknown), &campaign);
         });
     }
 }

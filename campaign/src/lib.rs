@@ -704,43 +704,17 @@ impl CampaignContract {
         event::contract_unfrozen(&env, &campaign.creator, timestamp);
     }
 
-/// Issue #175 – assert the current invoker is the campaign creator.
-///
-/// Reads the creator address from campaign storage and calls `require_auth()`.
-/// Panics with `Error::Unauthorized` if the campaign is not initialized;
-/// Soroban's auth framework panics if the invoker is not the creator.
-#[allow(dead_code)]
-fn require_creator(env: &Env) {
-    let campaign = get_campaign(env).unwrap_or_else(|| panic_with_error(env, Error::Unauthorized));
-    campaign.creator.require_auth();
-}
-
-/// Validates that `asset` is in the campaign's accepted list and returns the
-/// token contract address needed to construct a `token::Client`.
-fn get_token_address_for_asset(env: &Env, asset: &AssetInfo, campaign: &CampaignData) -> Address {
-    match asset {
-        AssetInfo::Stellar(addr) => {
-            let accepted = campaign
-                .accepted_assets
-                .iter()
-                .any(|a| a.issuer == Some(addr.clone()));
-            if !accepted {
-                panic_with_error(env, Error::AssetNotAccepted);
-            }
-            addr.clone()
-        }
-        AssetInfo::Native => {
-            // Find the XLM entry in accepted_assets by asset_code == "XLM".
-            let xlm_code = soroban_sdk::String::from_str(env, "XLM");
-            campaign
-                .accepted_assets
-                .iter()
-                .find(|a| a.asset_code == xlm_code)
-                .and_then(|a| a.issuer.clone())
-                .unwrap_or_else(|| panic_with_error(env, Error::AssetNotAccepted))
-        }
+    /// Issue #175 – assert the current invoker is the campaign creator.
+    ///
+    /// Reads the creator address from campaign storage and calls `require_auth()`.
+    /// Panics with `Error::Unauthorized` if the campaign is not initialized;
+    /// Soroban's auth framework panics if the invoker is not the creator.
+    #[allow(dead_code)]
+    fn require_creator(env: &Env) {
+        let campaign =
+            get_campaign(env).unwrap_or_else(|| panic_with_error(env, Error::Unauthorized));
+        campaign.creator.require_auth();
     }
-}
 
     /// Issue #90 – Block an asset, preventing any new donations in that token.
     ///
