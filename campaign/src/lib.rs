@@ -19,11 +19,6 @@
 //! be used for new campaign development.
 
 #![no_std]
-// `Events::publish` and a few call sites on `Ledger` are marked deprecated in
-// soroban-sdk 26.x in favour of `#[contractevent]` and the new ledger APIs.
-// Migrating every call site here is tracked as a follow-up issue; suppressing
-// the warning keeps CI clean without changing the published event topics.
-#![allow(deprecated)]
 
 pub mod contract;
 pub mod event;
@@ -49,7 +44,7 @@ use storage::{
 };
 
 use types::{
-    AssetInfo, CampaignData, CampaignInitializedEvent, CampaignReport, CampaignStatus,
+    AssetInfo, CampaignData, CampaignReport, CampaignStatus,
     CampaignStatusResponse, DashboardMetrics, DonorRecord, Error, MilestoneData, PlatformSummary,
     StellarAsset,
 };
@@ -157,9 +152,9 @@ impl CampaignContract {
             set_milestone(&env, index as u32, &milestone);
         }
 
-        env.events().publish(
-            ("campaign", "initialized"),
-            CampaignInitializedEvent {
+        event::campaign_initialized(
+            &env,
+            event::CampaignInitialized {
                 creator,
                 goal_amount,
                 end_time,
@@ -220,10 +215,7 @@ impl CampaignContract {
             && campaign.status == CampaignStatus::Active
         {
             campaign.status = CampaignStatus::GoalReached;
-            env.events().publish(
-                ("campaign", "campaign_goal_reached"),
-                campaign.raised_amount,
-            );
+            event::campaign_goal_reached(&env, campaign.raised_amount);
         }
 
         set_campaign(&env, &campaign);
@@ -518,19 +510,13 @@ impl CampaignContract {
                             );
 
                             // Emit event for this asset's refund
-                            env.events().publish(
-                                ("campaign", "asset_refund"),
-                                (donor.clone(), asset_address, refund_amount),
-                            );
+                            event::asset_refund(&env, &donor, &asset_address, refund_amount);
                         }
                     }
                 }
 
                 // Emit overall refund claimed event
-                env.events().publish(
-                    ("campaign", "refund_claimed"),
-                    (&donor, donor_record.total_donated),
-                );
+                event::refund_claimed(&env, &donor, donor_record.total_donated);
 
                 // Issue #242 – Release reentrancy lock
                 release_lock(&env);
@@ -743,7 +729,6 @@ impl CampaignContract {
         is_asset_blocked(&env, &asset)
     }
 }
-
 /// Panics the contract execution with the given error code.
 fn panic_with_error(env: &Env, error: Error) -> ! {
     env.panic_with_error(error)
@@ -768,7 +753,8 @@ mod test {
     where
         F: FnOnce() -> R,
     {
-        let contract_id = env.register_contract(None, crate::CampaignContract);
+        let contract_id = env.register(crate::CampaignContract, ());
         env.as_contract(&contract_id, f)
     }
 }
+

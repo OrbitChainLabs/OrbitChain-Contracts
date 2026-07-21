@@ -5,7 +5,7 @@ use crate::storage::{
     storage_set_asset_raised, storage_set_total_raised,
 };
 use crate::types::{Error, MilestoneStatus};
-use soroban_sdk::{panic_with_error, symbol_short, token, Address, Env};
+use soroban_sdk::{panic_with_error, token, Address, Env, String};
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -121,9 +121,11 @@ pub fn release_milestone_multi_asset(env: &Env, milestone_index: u32, recipient:
             Some(addr) => addr.clone(),
             None => {
                 // Native asset or asset without issuer — skip gracefully
-                env.events().publish(
-                    (symbol_short!("ms_skip"), symbol_short!("no_issuer")),
-                    (milestone_index, asset.asset_code.clone()),
+                event::milestone_release_skipped(
+                    env,
+                    milestone_index,
+                    asset.asset_code.clone(),
+                    String::from_str(env, "no_issuer"),
                 );
                 continue;
             }

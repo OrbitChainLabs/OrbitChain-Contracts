@@ -285,7 +285,7 @@ fn test_non_creator_release_panics() {
     let env = Env::default();
     env.ledger().set_timestamp(BASE);
     // No mock_all_auths — auth should be rejected
-    let contract_id = env.register_contract(None, crate::CampaignContract);
+    let contract_id = env.register(crate::CampaignContract, ());
     let client = CampaignContractClient::new(&env, &contract_id);
     let recipient = Address::generate(&env);
 
@@ -464,3 +464,4 @@ fn test_frozen_contract_release_panics() {
         crate::release_milestone::release_milestone(&env, 0, recipient);
     });
 }
+
