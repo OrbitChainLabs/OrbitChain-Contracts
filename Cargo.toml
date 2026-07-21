@@ -9,6 +9,9 @@ members = [
     "crates/tools",
     "token-bridge",
 ]
+exclude = [
+    "fuzz",
+]
 
 [workspace.package]
 version = "0.1.0"

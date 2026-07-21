@@ -1,0 +1,39 @@
+[package]
+name = "orbitchain-fuzz"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+soroban-sdk = { version = "26.0.1", features = ["testutils"] }
+orbitchain-campaign = { path = "../campaign" }
+orbitchain-common = { path = "../common" }
+
+[[bin]]
+name = "fuzz_donate"
+path = "fuzz_targets/donate.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "fuzz_initialize"
+path = "fuzz_targets/initialize.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "fuzz_release_milestone"
+path = "fuzz_targets/release_milestone.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "fuzz_claim_refund"
+path = "fuzz_targets/claim_refund.rs"
+test = false
+bench = false
