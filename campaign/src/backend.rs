@@ -6,8 +6,6 @@
 //! `test-backend` feature flag) uses an in-memory `BTreeMap` for testing
 //! without deploying contracts to the Soroban host.
 
-extern crate alloc;
-
 use crate::types::DataKey;
 use soroban_sdk::{Env, TryFromVal, Val};
 
@@ -136,6 +134,9 @@ impl StorageBackend for SorobanStorage {
 /// deployment required.
 ///
 /// TTL operations are no-ops — in-memory storage does not expire.
+#[cfg(all(feature = "test-backend", test))]
+extern crate alloc;
+
 #[cfg(all(feature = "test-backend", test))]
 pub struct InMemoryStorage {
     persistent: core::cell::RefCell<
