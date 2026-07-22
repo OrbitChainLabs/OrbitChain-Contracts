@@ -56,15 +56,9 @@ allow = [
     "Apache-2.0 WITH LLVM-exception",
     "BSD-2-Clause",
     "BSD-3-Clause",
-    "ISC",
-    "MPL-2.0",
     "Zlib",
-    "Unicode-DFS-2016",
     "Unicode-3.0",
-    "CC0-1.0",
-    "OpenSSL",
     "Unlicense",
-    "0BSD",
 ]
 # 0.8 (default) — flag low-confidence spans so CI does not surprise
 # contributors with new copyleft hits.
