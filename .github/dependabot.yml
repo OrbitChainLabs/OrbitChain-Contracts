@@ -1,0 +1,66 @@
+# Dependabot configuration for OrbitChain-Contracts (issue #134).
+#
+# Two update streams (per the issue's expected outcome):
+#   * `cargo`     — pulls from `crates.io` for every workspace crate.
+#   * `github-actions` — bumps the `uses:` pins in every workflow file.
+#
+# Both run weekly on Monday at 06:17 UTC (off the top of the hour to
+# avoid the GitHub scheduler spike and to align with the existing
+# daily-06:17 canary cron in `e2e-futurenet.yml`).
+#
+# Dependabot will auto-create the `dependencies` label on its first run
+# if it does not already exist in the repo.  `ci` is an existing label.
+#
+# Schema reference: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
+version: 2
+
+updates:
+  # Cargo (crates.io) updates.
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:17"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "ci"
+      - "dependencies"
+    # Keep PRs small and reviewable by splitting them into minor/patch
+    # versus major groups; major bumps still surface but get their own
+    # PR so they can be reviewed in isolation.
+    groups:
+      minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+      major:
+        applies-to: version-updates
+        update-types:
+          - "major"
+
+  # GitHub Actions `uses:` pins across every workflow file.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:17"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "ci"
+      - "dependencies"
+    groups:
+      minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+      major:
+        applies-to: version-updates
+        update-types:
+          - "major"

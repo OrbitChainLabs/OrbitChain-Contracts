@@ -1,0 +1,63 @@
+# Pull-request triage labels for OrbitChain-Contracts (issue #127).
+#
+# Configuration consumed by `.github/workflows/labeler.yml`, which uses
+# `actions/labeler@v5`.  Each top-level key is a repo label that the
+# bot applies when any glob on its list matches a changed file.
+#
+# Existing repo labels we map to: api, cli, frontend, ci, documentation,
+# storage, testing, security.  New labels Dependabot creates on first
+# run are listed in `.github/dependabot.yml` and need not be defined here.
+#
+# Schema reference: https://github.com/actions/labeler#configuration
+
+# Rust Soroban contracts — the canonical on-chain API surface.
+api:
+  - "campaign/**"
+  - "common/**"
+  - "token-bridge/**"
+  - "crates/contracts/core/**"
+  - "crates/contracts/batch-donor/**"
+
+# Native CLI tooling (`cargo run -p orbitchain-tools -- …`).
+cli:
+  - "crates/tools/**"
+
+# Frontend / mobile-wallet surfaces (Playwright + wallet integration).
+frontend:
+  - "wallet_connect.html"
+  - "wallet_connect.js"
+  - "tests/e2e/**"
+  - "playwright.config.js"
+
+# CI / build infrastructure.
+ci:
+  - ".github/workflows/**"
+  - ".github/*.md"
+  - ".github/ISSUE_TEMPLATE/**"
+  - ".cargo/**"
+  - "rust-toolchain.toml"
+  - "Cargo.toml"
+  - "Cargo.lock"
+
+# Documentation and reference material.
+documentation:
+  - "docs/**"
+  - "**/*.md"
+
+# Persistent / temporary storage backend code paths.
+storage:
+  - "**/storage*.rs"
+  - "**/backend.rs"
+
+# Tests / property-based / fuzz harnesses.
+testing:
+  - "**/tests/**"
+  - "**/*test*.rs"
+  - "**/proptest-strategies/**"
+  - "**/fuzz_targets/**"
+  - "fuzz/**"
+
+# Security process and security-sensitive code.
+security:
+  - "SECURITY.md"
+  - "**/security*.rs"
