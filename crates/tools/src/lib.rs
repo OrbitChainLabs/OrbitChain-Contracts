@@ -9,6 +9,7 @@ pub mod bump_storage;
 pub mod deploy;
 pub mod encrypted_vault;
 pub mod environment_config;
+pub mod error_mapper;
 pub mod key_manager;
 pub mod keypair_manager;
 pub mod response_handler;

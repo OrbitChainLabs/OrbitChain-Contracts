@@ -114,3 +114,15 @@ pub fn storage_bumped(env: &Env, operator: &Address, timestamp: u64) {
     env.events()
         .publish(("campaign", "storage_bumped"), (operator, timestamp));
 }
+
+/// Issue #90 – Emitted when an asset is blocked by the admin.
+pub fn asset_blocked(env: &Env, admin: &Address, asset: &Address, timestamp: u64) {
+    env.events()
+        .publish(("campaign", "asset_blocked"), (admin, asset, timestamp));
+}
+
+/// Issue #90 – Emitted when an asset is unblocked by the admin.
+pub fn asset_unblocked(env: &Env, admin: &Address, asset: &Address, timestamp: u64) {
+    env.events()
+        .publish(("campaign", "asset_unblocked"), (admin, asset, timestamp));
+}

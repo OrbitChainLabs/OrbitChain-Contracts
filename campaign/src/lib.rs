@@ -1,8 +1,19 @@
-//! OrbitChain campaign smart contract.
+//! OrbitChain campaign smart contract — module facade.
 //!
-//! This is the canonical campaign implementation for the repository: it owns
-//! the production campaign lifecycle, milestone handling, refunds,
-//! freeze/upgrade controls, analytics views, and all new campaign features.
+//! This is the canonical campaign implementation for the repository. The
+//! contract implementation is split across feature modules:
+//!
+//! - `contract` — lifecycle management (end, cancel, extend deadline, status)
+//! - `event` — typed event emission helpers
+//! - `get_all_milestones` — enriched milestone enumeration
+//! - `get_milestone` — single milestone view
+//! - `multi_asset_release` — proportional multi-asset milestone release
+//! - `release_milestone` — single-asset milestone release
+//! - `reports` — campaign report and analytics helpers
+//! - `storage` — persistent and temporary storage access
+//! - `types` — domain types, error codes, storage keys
+//! - `validation` — input validation and transition logic
+//! - `views` — enriched milestone view types and helpers
 //!
 //! `crates/contracts/core/` remains a legacy reference contract and should not
 //! be used for new campaign development.
@@ -14,30 +25,41 @@
 // the warning keeps CI clean without changing the published event topics.
 #![allow(deprecated)]
 
+pub mod asset_auth;
+pub mod backend;
 pub mod contract;
 pub mod event;
 pub mod get_all_milestones;
 pub mod get_milestone;
 pub mod multi_asset_release;
 pub mod release_milestone;
+pub mod reports;
 pub mod storage;
 pub mod types;
+pub mod validation;
 pub mod views;
 
-use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, String, Vec};
+use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, Vec};
 use storage::{
-    acquire_lock, bump_all_persistent, get_campaign, get_donor, get_donor_asset_donation,
-    get_milestone, increment_donor_asset_donation, is_frozen, release_lock, set_campaign,
-    set_donor, set_frozen, set_milestone, storage_get_donation_count, storage_get_release_count,
-    storage_get_total_raised, storage_get_unique_donor_count, storage_increment_asset_raised,
+    acquire_lock, block_asset, bump_all_persistent, get_campaign, get_donor,
+    get_donor_asset_donation, get_milestone, increment_donor_asset_donation, is_asset_blocked,
+    is_frozen, release_lock, set_campaign, set_donor, set_frozen, set_milestone,
+    storage_get_donation_count, storage_get_release_count, storage_get_total_raised,
+    storage_get_unique_donor_count, storage_increment_asset_raised,
     storage_increment_donation_count, storage_increment_unique_donor_count,
-    storage_set_total_raised, unlock_milestones_batch,
+    storage_set_total_raised, unblock_asset, unlock_milestones_batch,
 };
 
 use types::{
     AssetInfo, CampaignData, CampaignInitializedEvent, CampaignReport, CampaignStatus,
-    CampaignStatusResponse, DashboardMetrics, DonorRecord, Error, MilestoneData, MilestoneStatus,
-    PlatformSummary, StellarAsset,
+    CampaignStatusResponse, DashboardMetrics, DonorRecord, Error, MilestoneData, PlatformSummary,
+    StellarAsset,
+};
+
+use reports::{active_campaign_count, build_campaign_report, calculate_refund_amount};
+use validation::{
+    check_refund_eligibility, get_token_address_for_asset, resolve_asset_code, validate_assets,
+    validate_milestones,
 };
 
 pub const VERSION: u32 = 1;
@@ -166,6 +188,16 @@ impl CampaignContract {
         // Issue #242 – Reentrancy protection: acquire lock
         acquire_lock(&env);
 
+        // Load campaign early so asset whitelist can be checked before auth
+        // or any state mutations (issue #89).
+        let mut campaign: CampaignData =
+            get_campaign(&env).unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
+
+        // Issue #89 – Defence-in-depth: reject unauthorised assets before auth
+        // or storage writes.  Even if a later guard is accidentally removed,
+        // this early check guarantees the asset was in `accepted_assets`.
+        asset_auth::assert_asset_is_accepted(&env, &asset, &campaign);
+
         // Issue #243 – Authorization check
         donor.require_auth();
 
@@ -173,9 +205,6 @@ impl CampaignContract {
         if is_frozen(&env) {
             panic_with_error(&env, Error::ContractFrozen);
         }
-
-        let mut campaign: CampaignData =
-            get_campaign(&env).unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
 
         // Issue #194 – status check: only Active or GoalReached campaigns accept donations
         match campaign.status {
@@ -214,8 +243,12 @@ impl CampaignContract {
             .unwrap_or_else(|| panic_with_error(&env, Error::Overflow));
         storage_set_total_raised(&env, new_total);
 
-        // Track per-asset donation for pro-rata refund calculation
+        // Issue #90 – check per-asset block before processing donation
         let asset_address = get_token_address_for_asset(&env, &asset, &campaign);
+        if is_asset_blocked(&env, &asset_address) {
+            panic_with_error(&env, Error::AssetBlocked);
+        }
+
         storage_increment_asset_raised(&env, &asset_address, amount);
         increment_donor_asset_donation(&env, &donor, &asset_address, amount);
 
@@ -722,189 +755,79 @@ impl CampaignContract {
         let timestamp = env.ledger().timestamp();
         event::storage_bumped(&env, &operator, timestamp);
     }
-}
 
-/// Issue #175 – assert the current invoker is the campaign creator.
-///
-/// Reads the creator address from campaign storage and calls `require_auth()`.
-/// Panics with `Error::Unauthorized` if the campaign is not initialized;
-/// Soroban's auth framework panics if the invoker is not the creator.
-#[allow(dead_code)]
-fn require_creator(env: &Env) {
-    let campaign = get_campaign(env).unwrap_or_else(|| panic_with_error(env, Error::Unauthorized));
-    campaign.creator.require_auth();
-}
-
-/// Validates that `asset` is in the campaign's accepted list and returns the
-/// token contract address needed to construct a `token::Client`.
-fn get_token_address_for_asset(env: &Env, asset: &AssetInfo, campaign: &CampaignData) -> Address {
-    match asset {
-        AssetInfo::Stellar(addr) => {
-            let accepted = campaign
-                .accepted_assets
-                .iter()
-                .any(|a| a.issuer == Some(addr.clone()));
-            if !accepted {
-                panic_with_error(env, Error::AssetNotAccepted);
-            }
-            addr.clone()
-        }
-        AssetInfo::Native => {
-            // Find the XLM entry in accepted_assets by asset_code == "XLM".
-            let xlm_code = soroban_sdk::String::from_str(env, "XLM");
-            campaign
-                .accepted_assets
-                .iter()
-                .find(|a| a.asset_code == xlm_code)
-                .and_then(|a| a.issuer.clone())
-                .unwrap_or_else(|| panic_with_error(env, Error::AssetNotAccepted))
-        }
-    }
-}
-
-fn validate_assets(env: &Env, assets: &Vec<StellarAsset>) -> Result<(), Error> {
-    for asset in assets.iter() {
-        if asset.asset_code.is_empty() {
-            panic_with_error(env, Error::InvalidAssetCode);
-        }
-    }
-    Ok(())
-}
-
-fn validate_milestones(
-    env: &Env,
-    milestones: &Vec<MilestoneData>,
-    goal_amount: i128,
-) -> Result<(), Error> {
-    for i in 1..milestones.len() {
-        let prev = &milestones.get(i - 1).unwrap();
-        let current = &milestones.get(i).unwrap();
-
-        if prev.target_amount >= current.target_amount {
-            panic_with_error(env, Error::InvalidMilestones);
-        }
+    /// Issue #175 – assert the current invoker is the campaign creator.
+    ///
+    /// Reads the creator address from campaign storage and calls `require_auth()`.
+    /// Panics with `Error::Unauthorized` if the campaign is not initialized;
+    /// Soroban's auth framework panics if the invoker is not the creator.
+    #[allow(dead_code)]
+    fn require_creator(env: &Env) {
+        let campaign =
+            get_campaign(env).unwrap_or_else(|| panic_with_error(env, Error::Unauthorized));
+        campaign.creator.require_auth();
     }
 
-    if let Some(last_milestone) = milestones.last() {
-        if last_milestone.target_amount != goal_amount {
-            panic_with_error(env, Error::MilestoneMismatch);
-        }
-    } else {
-        panic_with_error(env, Error::InvalidMilestones);
+    /// Issue #90 – Block an asset, preventing any new donations in that token.
+    ///
+    /// Only the admin (creator) can call this.
+    /// Donations in a blocked asset panic with `Error::AssetBlocked`.
+    /// All other assets continue to function while one is blocked.
+    ///
+    /// # Panics
+    /// - `Error::Unauthorized` if not called by the creator
+    /// - `Error::NotInitialized` if campaign not yet initialized
+    pub fn block_asset(env: Env, asset: Address) {
+        let campaign =
+            get_campaign(&env).unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
+
+        campaign.creator.require_auth();
+
+        block_asset(&env, &asset);
+
+        let timestamp = env.ledger().timestamp();
+        event::asset_blocked(&env, &campaign.creator, &asset, timestamp);
     }
 
-    Ok(())
-}
+    /// Issue #90 – Unblock an asset, re-enabling donations in that token.
+    ///
+    /// Only the admin (creator) can call this.
+    ///
+    /// # Panics
+    /// - `Error::Unauthorized` if not called by the creator
+    /// - `Error::NotInitialized` if campaign not yet initialized
+    pub fn unblock_asset(env: Env, asset: Address) {
+        let campaign =
+            get_campaign(&env).unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
 
-/// Resolves the asset code string for an AssetInfo.
-/// For Native XLM returns "XLM"; for Stellar(addr) looks up the code in accepted_assets.
-fn resolve_asset_code(env: &Env, asset: &AssetInfo, campaign: &CampaignData) -> String {
-    match asset {
-        AssetInfo::Native => String::from_str(env, "XLM"),
-        AssetInfo::Stellar(addr) => campaign
-            .accepted_assets
-            .iter()
-            .find(|a| a.issuer == Some(addr.clone()))
-            .map(|a| a.asset_code.clone())
-            .unwrap_or_else(|| String::from_str(env, "UNKNOWN")),
+        campaign.creator.require_auth();
+
+        unblock_asset(&env, &asset);
+
+        let timestamp = env.ledger().timestamp();
+        event::asset_unblocked(&env, &campaign.creator, &asset, timestamp);
+    }
+
+    /// Issue #90 – Check whether a specific asset is blocked.
+    ///
+    /// No auth required (read-only view).
+    /// Returns `false` if the flag has never been set for this asset.
+    pub fn is_asset_blocked_view(env: Env, asset: Address) -> bool {
+        is_asset_blocked(&env, &asset)
+    }
+
+    /// Issue #89 – Public view: check whether an asset is in the campaign's
+    /// accepted whitelist.  No auth required (read-only).
+    ///
+    /// Returns `false` if the campaign has not been initialised yet.
+    pub fn is_asset_accepted(env: Env, asset: AssetInfo) -> bool {
+        asset_auth::is_asset_accepted(&env, &asset)
     }
 }
 
 /// Panics the contract execution with the given error code.
 fn panic_with_error(env: &Env, error: Error) -> ! {
     env.panic_with_error(error)
-}
-
-fn check_refund_eligibility(
-    env: &Env,
-    campaign: &CampaignData,
-    donor_record: &DonorRecord,
-) -> Result<(), Error> {
-    // Check 1: Campaign must be in terminal state
-    if !campaign.status.is_terminal() {
-        return Err(Error::RefundNotPermitted);
-    }
-
-    // Check 2: Refunds allowed based on campaign status
-    match campaign.status {
-        CampaignStatus::Cancelled => {
-            // Refunds always allowed for cancelled campaigns
-        }
-        CampaignStatus::Ended => {
-            // Refunds only if NO milestones have been released
-            for i in 0..campaign.milestone_count {
-                if let Some(milestone) = get_milestone(env, i) {
-                    if milestone.status == MilestoneStatus::Released {
-                        return Err(Error::RefundNotPermitted);
-                    }
-                }
-            }
-        }
-        _ => return Err(Error::RefundNotPermitted),
-    }
-
-    // Check 3: Current time within refund window (≤ end_time + REFUND_WINDOW)
-    let current_time = env.ledger().timestamp();
-    if current_time > campaign.end_time + REFUND_WINDOW {
-        return Err(Error::RefundWindowClosed);
-    }
-
-    // Check 4: Donor must not have already claimed refund
-    if donor_record.refund_claimed {
-        return Err(Error::RefundAlreadyClaimed);
-    }
-
-    Ok(())
-}
-
-/// Validates campaign status transitions; panics if invalid.
-///
-/// Returns `Result<(), Error>` which is already `#[must_use]`, so no extra
-/// attribute is needed (clippy `double_must_use`).
-pub fn validate_campaign_transition(
-    env: &Env,
-    current_status: &CampaignStatus,
-    next_status: &CampaignStatus,
-) -> Result<(), Error> {
-    match (current_status, next_status) {
-        (CampaignStatus::Active, CampaignStatus::GoalReached) => Ok(()),
-        (CampaignStatus::Active, CampaignStatus::Ended) => Ok(()),
-        (CampaignStatus::Active, CampaignStatus::Cancelled) => Ok(()),
-        (CampaignStatus::GoalReached, CampaignStatus::Ended) => Ok(()),
-        (CampaignStatus::GoalReached, CampaignStatus::Cancelled) => Ok(()),
-        (CampaignStatus::Ended, CampaignStatus::Cancelled) => Ok(()),
-        (CampaignStatus::Cancelled, _) => {
-            panic_with_error(env, Error::InvalidCampaignTransition);
-        }
-        _ => {
-            panic_with_error(env, Error::InvalidCampaignTransition);
-        }
-    }
-}
-
-/// Validates milestone status transitions; panics if invalid.
-///
-/// Returns `Result<(), Error>` which is already `#[must_use]`, so no extra
-/// attribute is needed (clippy `double_must_use`).
-pub fn validate_milestone_transition(
-    env: &Env,
-    current_status: &MilestoneStatus,
-    next_status: &MilestoneStatus,
-) -> Result<(), Error> {
-    match (current_status, next_status) {
-        (MilestoneStatus::Locked, MilestoneStatus::Unlocked) => Ok(()),
-        (MilestoneStatus::Locked, MilestoneStatus::Released) => Ok(()),
-        (MilestoneStatus::Unlocked, MilestoneStatus::Released) => Ok(()),
-        (MilestoneStatus::Released, _) => {
-            panic_with_error(env, Error::InvalidMilestoneTransition);
-        }
-        (MilestoneStatus::Unlocked, MilestoneStatus::Locked) => {
-            panic_with_error(env, Error::InvalidMilestoneTransition);
-        }
-        _ => {
-            panic_with_error(env, Error::InvalidMilestoneTransition);
-        }
-    }
 }
 
 #[cfg(test)]
@@ -928,67 +851,5 @@ mod test {
     {
         let contract_id = env.register_contract(None, crate::CampaignContract);
         env.as_contract(&contract_id, f)
-    }
-}
-
-pub(crate) fn calculate_refund_amount(
-    env: &Env,
-    donor_asset_amount: i128,
-    refund_numerator: i128,
-    refund_denominator: i128,
-) -> i128 {
-    if refund_denominator <= 0 {
-        panic_with_error(env, Error::Overflow);
-    }
-
-    let numerator = donor_asset_amount
-        .checked_mul(refund_numerator)
-        .unwrap_or_else(|| panic_with_error(env, Error::Overflow));
-
-    let refund = numerator / refund_denominator;
-
-    // PR #21: anti-dust floor — if the donor is entitled to something nonzero but
-    // floor division rounded it all the way down to 0, bump to 1 unit
-    // rather than letting them lose their entire refund to rounding.
-    if refund == 0 && numerator > 0 {
-        1
-    } else {
-        refund
-    }
-}
-fn active_campaign_count(env: &Env) -> u64 {
-    match get_campaign(env) {
-        Some(campaign) if campaign.status.accepts_donations() => 1,
-        _ => 0,
-    }
-}
-
-fn build_campaign_report(env: &Env, campaign: CampaignData) -> CampaignReport {
-    let creator = campaign.creator.clone();
-    let remaining_amount = campaign.remaining();
-    let progress_bps = if campaign.goal_amount <= 0 || campaign.raised_amount <= 0 {
-        0
-    } else if campaign.raised_amount >= campaign.goal_amount {
-        10_000
-    } else {
-        let scaled = campaign
-            .raised_amount
-            .checked_mul(10_000)
-            .unwrap_or_else(|| panic_with_error(env, Error::Overflow));
-        (scaled / campaign.goal_amount) as u32
-    };
-
-    CampaignReport {
-        creator,
-        goal_amount: campaign.goal_amount,
-        raised_amount: campaign.raised_amount,
-        remaining_amount,
-        progress_bps,
-        end_time: campaign.end_time,
-        status: campaign.status,
-        milestone_count: campaign.milestone_count,
-        donor_count: storage_get_unique_donor_count(env),
-        donation_count: storage_get_donation_count(env),
-        release_count: storage_get_release_count(env),
     }
 }

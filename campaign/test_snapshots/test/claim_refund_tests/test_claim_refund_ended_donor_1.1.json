@@ -865,87 +865,88 @@
               "key": {
                 "vec": [
                   {
-                    "symbol": "MilestoneData"
-                  },
-                  {
-                    "u32": 0
+                    "symbol": "MilestonesVec"
                   }
                 ]
               },
               "durability": "persistent",
               "val": {
-                "map": [
+                "vec": [
                   {
-                    "key": {
-                      "symbol": "description_hash"
-                    },
-                    "val": {
-                      "bytes": "0000000000000000000000000000000000000000000000000000000000000000"
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "index"
-                    },
-                    "val": {
-                      "u32": 0
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "release_tx"
-                    },
-                    "val": "void"
-                  },
-                  {
-                    "key": {
-                      "symbol": "released_amount"
-                    },
-                    "val": {
-                      "i128": "9999"
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "released_at"
-                    },
-                    "val": {
-                      "u64": "31536000"
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "released_at_ledger"
-                    },
-                    "val": "void"
-                  },
-                  {
-                    "key": {
-                      "symbol": "released_to"
-                    },
-                    "val": {
-                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOLZM"
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "status"
-                    },
-                    "val": {
-                      "vec": [
-                        {
-                          "symbol": "Released"
+                    "map": [
+                      {
+                        "key": {
+                          "symbol": "description_hash"
+                        },
+                        "val": {
+                          "bytes": "0000000000000000000000000000000000000000000000000000000000000000"
                         }
-                      ]
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "target_amount"
-                    },
-                    "val": {
-                      "i128": "9999"
-                    }
+                      },
+                      {
+                        "key": {
+                          "symbol": "index"
+                        },
+                        "val": {
+                          "u32": 0
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "release_tx"
+                        },
+                        "val": "void"
+                      },
+                      {
+                        "key": {
+                          "symbol": "released_amount"
+                        },
+                        "val": {
+                          "i128": "9999"
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "released_at"
+                        },
+                        "val": {
+                          "u64": "31536000"
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "released_at_ledger"
+                        },
+                        "val": "void"
+                      },
+                      {
+                        "key": {
+                          "symbol": "released_to"
+                        },
+                        "val": {
+                          "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOLZM"
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "status"
+                        },
+                        "val": {
+                          "vec": [
+                            {
+                              "symbol": "Released"
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "target_amount"
+                        },
+                        "val": {
+                          "i128": "9999"
+                        }
+                      }
+                    ]
                   }
                 ]
               }
