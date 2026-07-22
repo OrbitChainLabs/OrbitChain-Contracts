@@ -50,6 +50,15 @@ resolution tree has mutually-incompatible transitive constraints.
   `toml_edit v0.22`.
 - 0.15 → 0.17 changed the `RawTable` API; old `ark-*` is
   unmaintained.
+- **Historical note**: pre-#192 lockfiles also carried a third
+  version `hashbrown v0.12.3` (even older `ark-*` cryptographic
+  chain variants and `rustc_hash` consumers). Post-#192 the
+  resolver drops `0.12.3` once `cargo check --workspace --all-targets`
+  refreshes the lockfile, leaving only the `0.15 + 0.17` pair as
+  the post-merge accepted duplication. A contributor inspecting
+  `origin/main`'s `Cargo.lock` directly (i.e., before the PR
+  cluster lands) may still see `0.12.3` and wonder why this
+  ledger mentions only two versions — that's why.
 
 ### `stellar-strkey`  — 0.0.13 + 0.0.16
 
