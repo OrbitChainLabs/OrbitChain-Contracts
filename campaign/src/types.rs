@@ -324,6 +324,12 @@ pub enum DataKey {
     /// clients read one entry instead of recomputing from campaign +
     /// milestones + counters on every call.
     CachedReport,
+
+    // ── Persistent (appended — issue #119) ──────────────────────────────────
+    /// Inverse index: every donor address that has contributed the given
+    /// asset, in first-donation order. Lets dashboards list an asset's donors
+    /// without scanning every `DonorAssetDonation` pair.
+    AssetDonors(Address),
 }
 
 // ─── Asset types ──────────────────────────────────────────────────────────────

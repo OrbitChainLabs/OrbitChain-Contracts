@@ -25,6 +25,10 @@
 // the warning keeps CI clean without changing the published event topics.
 #![allow(deprecated)]
 
+// Tests build hosted: std is available for snapshot/formatting helpers.
+#[cfg(test)]
+extern crate std;
+
 pub mod asset_auth;
 pub mod backend;
 pub mod contract;
@@ -41,13 +45,15 @@ pub mod views;
 
 use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, Vec};
 use storage::{
-    acquire_lock, block_asset, bump_all_persistent, get_cached_report_storage, get_campaign,
-    get_donor, get_donor_asset_donation, get_milestone, increment_donor_asset_donation,
-    is_asset_blocked, is_frozen, release_lock, set_campaign, set_donor, set_frozen, set_milestone,
-    storage_get_donation_count, storage_get_release_count, storage_get_total_raised,
-    storage_get_unique_donor_count, storage_increment_asset_raised,
-    storage_increment_donation_count, storage_increment_unique_donor_count,
-    storage_set_total_raised, unblock_asset, unlock_milestones_batch,
+    acquire_lock, block_asset, bump_all_persistent,
+    get_asset_donor_count as storage_get_asset_donor_count, get_asset_donors_page,
+    get_cached_report_storage, get_campaign, get_donor, get_donor_asset_donation, get_milestone,
+    increment_donor_asset_donation, is_asset_blocked, is_frozen, record_asset_donor, release_lock,
+    set_campaign, set_donor, set_frozen, set_milestone, storage_get_donation_count,
+    storage_get_release_count, storage_get_total_raised, storage_get_unique_donor_count,
+    storage_increment_asset_raised, storage_increment_donation_count,
+    storage_increment_unique_donor_count, storage_set_total_raised, unblock_asset,
+    unlock_milestones_batch,
 };
 
 use types::{
@@ -254,6 +260,12 @@ impl CampaignContract {
         }
 
         storage_increment_asset_raised(&env, &asset_address, amount);
+        // Issue #119 – maintain the asset→donors inverse index. First donation
+        // in this asset (prior amount 0) appends the donor; the prior-amount
+        // check makes dedup O(1) instead of scanning the index.
+        if get_donor_asset_donation(&env, &donor, &asset_address) == 0 {
+            record_asset_donor(&env, &asset_address, &donor);
+        }
         increment_donor_asset_donation(&env, &donor, &asset_address, amount);
 
         // Update donor record
@@ -338,6 +350,23 @@ impl CampaignContract {
     pub fn get_cached_report(env: Env) -> Option<CampaignReport> {
         get_cached_report_storage(&env)
             .or_else(|| get_campaign(&env).map(|campaign| build_campaign_report(&env, campaign)))
+    }
+
+    /// Issue #119 – Paginated donor listing for an asset, from the inverse
+    /// index maintained by donate. `start` is zero-based; out-of-range windows
+    /// return an empty Vec.
+    pub fn get_asset_donors(
+        env: Env,
+        asset_address: Address,
+        start: u32,
+        limit: u32,
+    ) -> Vec<Address> {
+        get_asset_donors_page(&env, &asset_address, start, limit)
+    }
+
+    /// Issue #119 – Number of distinct donors that have contributed the asset.
+    pub fn get_asset_donor_count(env: Env, asset_address: Address) -> u32 {
+        storage_get_asset_donor_count(&env, &asset_address)
     }
 
     /// Returns export-friendly aggregate counters for this contract instance.
@@ -801,8 +830,10 @@ fn panic_with_error(env: &Env, error: Error) -> ! {
 
 #[cfg(test)]
 mod test {
+    pub mod asset_donor_index_tests;
     pub mod bump_storage_tests;
     pub mod claim_refund_tests;
+    pub mod event_snapshot_tests;
     pub mod get_campaign_status_tests;
     pub mod integration_tests;
     pub mod invariant_tests;
