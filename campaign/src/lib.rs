@@ -536,12 +536,7 @@ impl CampaignContract {
                             );
 
                             // Emit event for this asset's refund
-                            event::asset_refund(
-                                &env,
-                                &donor,
-                                &asset_address,
-                                refund_amount,
-                            );
+                            event::asset_refund(&env, &donor, &asset_address, refund_amount);
                         }
                     }
                 }

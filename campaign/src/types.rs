@@ -610,4 +610,3 @@ pub struct DashboardMetrics {
     pub total_releases: u64,
     pub total_transactions: u64,
 }
-

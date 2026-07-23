@@ -273,12 +273,7 @@ pub fn milestone_released(
 }
 
 /// Emitted when the contract is upgraded by the admin.
-pub fn contract_upgraded(
-    env: &Env,
-    admin: &Address,
-    new_wasm_hash: BytesN<32>,
-    timestamp: u64,
-) {
+pub fn contract_upgraded(env: &Env, admin: &Address, new_wasm_hash: BytesN<32>, timestamp: u64) {
     ContractUpgraded {
         admin: admin.clone(),
         new_wasm_hash,

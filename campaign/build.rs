@@ -299,7 +299,11 @@ fn extract_events(source: &str) -> Vec<EventDef> {
         match &item_struct.fields {
             syn::Fields::Named(named) => {
                 for field in &named.named {
-                    let field_name = field.ident.as_ref().map(|i| i.to_string()).unwrap_or_default();
+                    let field_name = field
+                        .ident
+                        .as_ref()
+                        .map(|i| i.to_string())
+                        .unwrap_or_default();
                     let (json_type, soroban_type) = map_type(&field.ty);
                     let field_desc = extract_doc(&field.attrs);
                     fields.push(FieldDef {
