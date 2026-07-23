@@ -41,9 +41,9 @@ pub mod views;
 
 use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, Vec};
 use storage::{
-    acquire_lock, block_asset, bump_all_persistent, get_campaign, get_donor,
-    get_donor_asset_donation, get_milestone, increment_donor_asset_donation, is_asset_blocked,
-    is_frozen, release_lock, set_campaign, set_donor, set_frozen, set_milestone,
+    acquire_lock, block_asset, bump_all_persistent, get_cached_report_storage, get_campaign,
+    get_donor, get_donor_asset_donation, get_milestone, increment_donor_asset_donation,
+    is_asset_blocked, is_frozen, release_lock, set_campaign, set_donor, set_frozen, set_milestone,
     storage_get_donation_count, storage_get_release_count, storage_get_total_raised,
     storage_get_unique_donor_count, storage_increment_asset_raised,
     storage_increment_donation_count, storage_increment_unique_donor_count,
@@ -56,7 +56,9 @@ use types::{
     StellarAsset,
 };
 
-use reports::{active_campaign_count, build_campaign_report, calculate_refund_amount};
+use reports::{
+    active_campaign_count, build_campaign_report, calculate_refund_amount, refresh_report_cache,
+};
 use validation::{
     check_refund_eligibility, get_token_address_for_asset, resolve_asset_code, validate_assets,
     validate_milestones,
@@ -170,6 +172,8 @@ impl CampaignContract {
                 created_at_ledger: env.ledger().sequence(),
             },
         );
+
+        refresh_report_cache(&env);
 
         Ok(())
     }
@@ -289,6 +293,8 @@ impl CampaignContract {
             env.ledger().timestamp(),
         );
 
+        refresh_report_cache(&env);
+
         // Issue #242 – Release reentrancy lock
         release_lock(&env);
     }
@@ -324,6 +330,14 @@ impl CampaignContract {
     /// Returns dashboard-ready campaign analytics.
     pub fn get_campaign_report(env: Env) -> Option<CampaignReport> {
         get_campaign(&env).map(|campaign| build_campaign_report(&env, campaign))
+    }
+
+    /// Issue #121 – Memoised dashboard report served in a single storage read.
+    /// Falls back to computing (without populating — reads stay read-only) for
+    /// contract state that predates the cache.
+    pub fn get_cached_report(env: Env) -> Option<CampaignReport> {
+        get_cached_report_storage(&env)
+            .or_else(|| get_campaign(&env).map(|campaign| build_campaign_report(&env, campaign)))
     }
 
     /// Returns export-friendly aggregate counters for this contract instance.
@@ -541,6 +555,8 @@ impl CampaignContract {
                     (&donor, donor_record.total_donated),
                 );
 
+                refresh_report_cache(&env);
+
                 // Issue #242 – Release reentrancy lock
                 release_lock(&env);
             }
@@ -554,6 +570,7 @@ impl CampaignContract {
     /// Transitions to `Ended` status. No refunds after milestones are released.
     pub fn end_campaign(env: Env) {
         contract::end_campaign(&env);
+        refresh_report_cache(&env);
     }
 
     /// Issue #214 – Cancel the campaign.
@@ -562,6 +579,7 @@ impl CampaignContract {
     /// Transitions to `Cancelled` status. All donors become refund-eligible.
     pub fn cancel_campaign(env: Env) {
         contract::cancel_campaign(&env);
+        refresh_report_cache(&env);
     }
 
     /// Issue #215 – Extend the campaign deadline.
@@ -572,6 +590,7 @@ impl CampaignContract {
     /// current ledger timestamp.
     pub fn extend_deadline(env: Env, new_end_time: u64) {
         contract::extend_deadline(&env, new_end_time);
+        refresh_report_cache(&env);
     }
 
     /// Issue #235 – Get campaign status with computed fields.
@@ -592,6 +611,7 @@ impl CampaignContract {
             get_campaign(&env).unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
         campaign.creator.require_auth();
         release_milestone::release_milestone(&env, milestone_index, recipient);
+        refresh_report_cache(&env);
     }
 
     /// Issue #208 – Multi-asset milestone release with proportional distribution.
@@ -606,6 +626,7 @@ impl CampaignContract {
             get_campaign(&env).unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
         campaign.creator.require_auth();
         multi_asset_release::release_milestone_multi_asset(&env, milestone_index, recipient);
+        refresh_report_cache(&env);
     }
 
     /// Issue #199 – Get milestone view (raw data).
@@ -789,6 +810,7 @@ mod test {
     pub mod negative_path_tests;
     pub mod refund_eligibility_tests;
     pub mod release_milestone_tests;
+    pub mod report_cache_tests;
 
     /// Shared helper: register the contract and run the body inside
     /// `env.as_contract()` so storage, ledger, and auth work correctly.

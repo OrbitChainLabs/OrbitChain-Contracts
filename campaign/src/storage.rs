@@ -1,6 +1,8 @@
 // src/storage.rs
 
-use crate::types::{CampaignData, DataKey, DonorRecord, Error, MilestoneData, MilestoneStatus};
+use crate::types::{
+    CampaignData, CampaignReport, DataKey, DonorRecord, Error, MilestoneData, MilestoneStatus,
+};
 use soroban_sdk::{panic_with_error, Address, Env, Vec};
 
 // ─── TTL Constants ────────────────────────────────────────────────────────────
@@ -488,6 +490,23 @@ pub fn unblock_asset(env: &Env, asset: &Address) {
     bump_persistent(env, &key);
 }
 
+// ─── Memoised campaign report (issue #121) ───────────────────────────────────
+
+/// Read the cached dashboard report, refreshing its TTL.
+pub fn get_cached_report_storage(env: &Env) -> Option<CampaignReport> {
+    let key = DataKey::CachedReport;
+    let value = env.storage().persistent().get(&key)?;
+    bump_persistent(env, &key);
+    Some(value)
+}
+
+/// Store the freshly computed dashboard report.
+pub fn set_cached_report_storage(env: &Env, report: &CampaignReport) {
+    let key = DataKey::CachedReport;
+    env.storage().persistent().set(&key, report);
+    bump_persistent(env, &key);
+}
+
 // ─── Bulk TTL refresh ─────────────────────────────────────────────────────────
 
 /// Refresh TTL for all core persistent keys in a single call.
@@ -511,6 +530,10 @@ pub fn bump_all_persistent(env: &Env, milestone_count: u32) {
     let vec_key = DataKey::MilestonesVec;
     if env.storage().persistent().has(&vec_key) {
         bump_persistent(env, &vec_key);
+    }
+    let report_key = DataKey::CachedReport;
+    if env.storage().persistent().has(&report_key) {
+        bump_persistent(env, &report_key);
     }
     // Legacy per-index entries (pre-#118 layouts, not yet migrated).
     for i in 0..milestone_count {
