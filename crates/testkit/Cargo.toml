@@ -3,6 +3,7 @@ name = "orbitchain-testkit"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
 description = "Shared test utilities and proptest strategies for OrbitChain contracts"
 
 [lib]

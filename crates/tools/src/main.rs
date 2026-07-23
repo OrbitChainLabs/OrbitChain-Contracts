@@ -1,7 +1,9 @@
 //! OrbitChain CLI entry point.
 //!
 //! Parses sub-commands for config, network, vault, asset, signing, response,
-//! keymanager, keypair, deploy, invoke, and account operations.
+//! keymanager, keypair, invoke, deploy, errors, and account operations.
+//! `invoke` is fully implemented (wraps `stellar contract invoke` with
+//! vault-backed key resolution); `account` remains a stub.
 //!
 //! Logging (issue #140): every invocation runs inside a `cli_invocation` span
 //! carrying the command and CLI version. The human formatter is the default;
@@ -26,6 +28,7 @@ use orbitchain_tools::deploy;
 use orbitchain_tools::encrypted_vault::EncryptedVault;
 use orbitchain_tools::environment_config::EnvironmentConfig;
 use orbitchain_tools::error_mapper::ErrorMapper;
+use orbitchain_tools::invoke;
 use orbitchain_tools::key_manager::KeyManager;
 use orbitchain_tools::keypair_manager::{AccountFunding, DistributionAccount, MasterKeypair};
 use orbitchain_tools::response_handler::ResponseHandler;
@@ -152,7 +155,7 @@ fn dispatch(command: &str, args: &[String]) -> Result<()> {
         "toggle" => handle_toggle(&args[2..]),
         "asset" => handle_asset(&args[2..]),
         "deploy" => handle_deploy(&args[2..]),
-        "invoke" => handle_invoke(&args[2..]),
+        "invoke" => invoke::handle(&args[2..]),
         "account" => handle_account(),
         "keymanager" => handle_keymanager(&args[2..]),
         "keypair" => handle_keypair(&args[2..]),
@@ -198,10 +201,11 @@ fn print_available_commands() {
     println!(
         "  bump-storage          - Invoke the operator-only bump_storage_as_operator entrypoint"
     );
+    println!("  invoke                - Invoke a contract method (wraps `stellar contract invoke`");
+    println!("                          with vault-backed key resolution)");
     println!("  errors <cmd>          - Map error codes to human-readable messages (list|json)");
     println!();
     println!("Stubs (no-op placeholders, do not rely on in production):");
-    println!("  invoke <method>       - Stub. Use `stellar contract invoke` natively.");
     println!("  account               - Stub. Use `keypair generate-master|fund` instead.");
     println!();
     println!("Global flags:");
@@ -276,30 +280,6 @@ fn handle_network() -> Result<()> {
 
 fn handle_deploy(args: &[String]) -> Result<()> {
     deploy::run(args)
-}
-
-fn handle_invoke(args: &[String]) -> Result<()> {
-    println!("🔄 The 'invoke' command is a stub and is NOT yet implemented in this binary.");
-    if args.is_empty() {
-        println!("💡 Invoke natively with:");
-        println!("     stellar contract invoke \\");
-        println!("         --id <CONTRACT_ID> \\");
-        println!("         --source <KEY> \\");
-        println!("         --network testnet \\");
-        println!("         -- <method> [args...]");
-    } else {
-        println!(
-            "💡 You asked to invoke '{}'. Run it natively for now:",
-            args[0]
-        );
-        println!("     stellar contract invoke \\");
-        println!("         --id <CONTRACT_ID> \\");
-        println!("         --source <KEY> \\");
-        println!("         --network testnet \\");
-        println!("         -- {} [args...]", args[0]);
-    }
-    println!("🔗 Tracked in: https://github.com/OrbitChainLabs/OrbitChain-Contracts/issues/37");
-    Ok(())
 }
 
 fn handle_account() -> Result<()> {

@@ -104,6 +104,9 @@ impl SecureVault {
             None => println!("Issuing Secret Key: ⚠️  Not set"),
         }
     }
+
+    /// # Deprecated
+    /// This method stores keys in plaintext. Use `EncryptedVault::save_to_file()` instead.
     pub fn save_to_file(&self, _path: &str) -> Result<()> {
         eprintln!("🚨 ERROR: SecureVault::save_to_file() stores keys in PLAINTEXT.");
         eprintln!("   Use EncryptedVault::save_to_file() instead.");

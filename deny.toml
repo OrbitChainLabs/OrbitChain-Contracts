@@ -1,0 +1,94 @@
+# cargo-deny configuration for OrbitChain-Contracts (issue #125).
+#
+# Run via `make deny` (wraps `cargo deny check`) or directly with
+# `cargo deny check` / `cargo deny check licenses`.
+#
+# cargo-deny is deny-by-default for licenses: any crate whose SPDX
+# license is NOT in `[licenses].allow` is rejected.  Listing copyleft
+# licenses (GPL/AGPL/LGPL family) under `allow` is the policy decision;
+# explicitly enumerating them under a separate `deny` key was removed in
+# cargo-deny 0.16 (see EmbarkStudios/cargo-deny#611).
+#
+# Documentation: https://embarkstudios.github.io/cargo-deny/
+
+[graph]
+# Default: don't synthesize the full all-features graph; some
+# dev-dependencies pull optional features that are not built in CI.
+all-features = false
+
+[advisories]
+# Advisory DB is shared with `make audit` (cargo audit).  If you change
+# this, mirror the change in `[advisories]` checks for `make audit`
+# (see Makefile) so the two gates stay in sync.
+db-path = "~/.cargo/advisory-db"
+db-urls = ["https://github.com/rustsec/advisory-db"]
+# A yanked crate version is a soft warning, not a hard fail: most
+# yanked releases stay source-compatible and a future cargo run will
+# pick the unyanked successor.
+yanked = "warn"
+# Unmaintained-but-still-in-tree advisories.  These are crate-hygiene
+# notices from the rustsec/advisory-db, not live vulnerability exploits.
+# Each ID has a tracked follow-up to either upgrade the dependency or
+# replace it with a maintained alternative:
+#   * RUSTSEC-2021-0141 — `dotenv 0.15.x` (used by `crates/tools` for the
+#     env-var loader; the 0.15 → 1.x API change is a separate upgrade)
+#   * RUSTSEC-2024-0436 — `paste 1.0.x` (transitive of `proc-macro2`;
+#     `pastey` is the modern replacement but the proc-macro call sites
+#     here do not yet justify the bump)
+ignore = [
+    "RUSTSEC-2021-0141",
+    "RUSTSEC-2024-0436",
+]
+
+[licenses]
+# Issue #125 — explicit permissive allow-list.  Anything NOT in this
+# list (including GPL-*, AGPL-*, LGPL-*, NPL, QPL, RPSL, RSCPL, etc.)
+# is denied by cargo-deny's deny-by-default behavior.  The allow-list
+# is sized to cover every crate in the current Cargo.lock
+# (soroban-sdk 26.x, ed25519-dalek 2.2, chrono, tokio, tracing, …)
+# plus the transitive blast-radius (curve25519-dalek is BSD-3-Clause;
+# subtle is dual MIT/BSD-3-Clause; most crates are dual
+# MIT/Apache-2.0; iana-time-zone under chrono is 0BSD OR MIT OR
+# Apache-2.0).
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "MPL-2.0",
+    "Zlib",
+    "Unicode-DFS-2016",
+    "Unicode-3.0",
+    "CC0-1.0",
+    "OpenSSL",
+    "Unlicense",
+    "0BSD",
+]
+# 0.8 (default) — flag low-confidence spans so CI does not surprise
+# contributors with new copyleft hits.
+confidence-threshold = 0.8
+
+[bans]
+# Same crate appearing in multiple versions in the resolved lockfile
+# is usually a smell but is often legitimate (different dev-dep
+# sub-graphs pull slightly different majors).  Warn rather than fail.
+multiple-versions = "warn"
+# In this monorepo, every dep cargo-deny reports under "wildcards" is
+# *either* a workspace-managed dep (`{ workspace = true }`) or a path
+# dep (`{ path = "../..." }`) — both intentional and versioned
+# centrally.  The actual lockfile has no literal `*` version.  Warn
+# instead of failing CI; flip to `"deny"` only if a wildcard enters
+# via a third-party crates.io dependency.
+wildcards = "warn"
+highlight = "all"
+skip = []
+skip-tree = []
+
+[sources]
+# Only pull from crates.io.  No private / opaque registries today.
+unknown-registry = "deny"
+# Default (`warn`) left implicit.
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

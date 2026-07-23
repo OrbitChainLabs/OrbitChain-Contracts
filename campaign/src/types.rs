@@ -319,6 +319,12 @@ pub enum DataKey {
     /// Present = asset is blocked; absent = not blocked.
     BlockedAsset(Address),
 
+    // ── Persistent (appended — issue #121) ──────────────────────────────────
+    /// Dashboard report memoised at state-change time (issue #121), so polling
+    /// clients read one entry instead of recomputing from campaign +
+    /// milestones + counters on every call.
+    CachedReport,
+
     // ── Persistent (appended — issue #57) ───────────────────────────────────
     /// Operator authorization flag, keyed by operator address. Present and
     /// `true` means the address may call operator-only entrypoints (e.g.

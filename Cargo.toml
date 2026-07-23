@@ -17,6 +17,9 @@ exclude = [
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.82"
+# Mirrors the LICENSE file in the repo root; both `make deny` and
+# crates.io require this field to be present on every published crate.
+license = "MIT"
 
 [workspace.dependencies]
 soroban-sdk = { version = "26.0.1" }
@@ -24,4 +27,4 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 anyhow = "1.0"
 dotenv = "0.15"
-common = { package = "orbitchain-common", path = "common" }
+common = { package = "orbitchain-common", version = "0.1.0", path = "common" }
