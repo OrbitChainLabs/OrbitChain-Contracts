@@ -1,8 +1,9 @@
 # Pull-request triage labels for OrbitChain-Contracts (issue #127).
 #
 # Configuration consumed by `.github/workflows/labeler.yml`, which uses
-# `actions/labeler@v5`.  Each top-level key is a repo label that the
-# bot applies when any glob on its list matches a changed file.
+# `actions/labeler@v5`.  v5 syntax: each label maps to a list of matcher
+# objects — `changed-files` with `any-glob-to-any-file` replaces the bare
+# glob lists that v4 accepted.
 #
 # Existing repo labels we map to: api, cli, frontend, ci, documentation,
 # storage, testing, security.  New labels Dependabot creates on first
@@ -12,52 +13,68 @@
 
 # Rust Soroban contracts — the canonical on-chain API surface.
 api:
-  - "campaign/**"
-  - "common/**"
-  - "token-bridge/**"
-  - "crates/contracts/core/**"
-  - "crates/contracts/batch-donor/**"
+  - changed-files:
+      - any-glob-to-any-file:
+          - "campaign/**"
+          - "common/**"
+          - "token-bridge/**"
+          - "crates/contracts/core/**"
+          - "crates/contracts/batch-donor/**"
 
 # Native CLI tooling (`cargo run -p orbitchain-tools -- …`).
 cli:
-  - "crates/tools/**"
+  - changed-files:
+      - any-glob-to-any-file:
+          - "crates/tools/**"
 
 # Frontend / mobile-wallet surfaces (Playwright + wallet integration).
 frontend:
-  - "wallet_connect.html"
-  - "wallet_connect.js"
-  - "tests/e2e/**"
-  - "playwright.config.js"
+  - changed-files:
+      - any-glob-to-any-file:
+          - "wallet_connect.html"
+          - "wallet_connect.js"
+          - "tests/e2e/**"
+          - "playwright.config.js"
 
 # CI / build infrastructure.
 ci:
-  - ".github/workflows/**"
-  - ".github/*.md"
-  - ".github/ISSUE_TEMPLATE/**"
-  - ".cargo/**"
-  - "rust-toolchain.toml"
-  - "Cargo.toml"
-  - "Cargo.lock"
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/workflows/**"
+          - ".github/*.md"
+          - ".github/ISSUE_TEMPLATE/**"
+          - ".cargo/**"
+          - "rust-toolchain.toml"
+          - "Cargo.toml"
+          - "Cargo.lock"
 
 # Documentation and reference material.
 documentation:
-  - "docs/**"
-  - "**/*.md"
+  - changed-files:
+      - any-glob-to-any-file:
+          - "docs/**"
+          - "**/*.md"
 
 # Persistent / temporary storage backend code paths.
 storage:
-  - "**/storage*.rs"
-  - "**/backend.rs"
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/storage*.rs"
+          - "**/backend.rs"
 
 # Tests / property-based / fuzz harnesses.
 testing:
-  - "**/tests/**"
-  - "**/*test*.rs"
-  - "**/proptest-strategies/**"
-  - "**/fuzz_targets/**"
-  - "fuzz/**"
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/tests/**"
+          - "**/*test*.rs"
+          - "**/proptest-strategies/**"
+          - "**/fuzz_targets/**"
+          - "fuzz/**"
 
 # Security process and security-sensitive code.
 security:
-  - "SECURITY.md"
-  - "**/security*.rs"
+  - changed-files:
+      - any-glob-to-any-file:
+          - "SECURITY.md"
+          - "**/security*.rs"
