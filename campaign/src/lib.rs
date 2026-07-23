@@ -458,6 +458,9 @@ impl CampaignContract {
     /// Issue #242 – Reentrancy protection: acquires lock at entry, releases at exit.
     /// Issue #243 – Authorization: `donor.require_auth()`.
     /// Issue #244 – Balance verification: checks contract balance before each transfer.
+    /// Issue #94 – `refund_claimed` is only set (and `refund_claimed` emitted) when
+    /// at least one transfer actually happens; a zero-value claim leaves the donor
+    /// unclaimed so they may retry if conditions change.
     ///
     /// # Panics
     /// - `Error::NotInitialized` if campaign not initialized
@@ -499,11 +502,10 @@ impl CampaignContract {
                 let refund_numerator = campaign.raised_amount - total_released;
                 let refund_denominator = campaign.raised_amount;
 
-                // Mark refund as claimed early to prevent reentrancy
-                donor_record.refund_claimed = true;
-                set_donor(&env, &donor, &donor_record);
-
-                // For each asset the donor contributed to, calculate and transfer refund
+                // Issue #94 – First pass (storage reads + pure math only): compute
+                // each asset's refund so we know whether this claim moves any value
+                // BEFORE mutating donor state. No external calls happen here.
+                let mut pending_refunds: Vec<(Address, i128)> = Vec::new(&env);
                 for asset in campaign.accepted_assets.iter() {
                     let asset_address = match &asset.issuer {
                         Some(addr) => addr.clone(),
@@ -524,36 +526,50 @@ impl CampaignContract {
                         );
 
                         if refund_amount > 0 {
-                            // Issue #244 – Verify contract balance before transfer
-                            use soroban_sdk::token;
-                            let token_client = token::Client::new(&env, &asset_address);
-                            let contract_balance =
-                                token_client.balance(&env.current_contract_address());
-                            if contract_balance < refund_amount {
-                                panic_with_error(&env, Error::InsufficientContractBalance);
-                            }
-
-                            // Transfer refund to donor
-                            token_client.transfer(
-                                &env.current_contract_address(),
-                                &donor,
-                                &refund_amount,
-                            );
-
-                            // Emit event for this asset's refund
-                            env.events().publish(
-                                ("campaign", "asset_refund"),
-                                (donor.clone(), asset_address, refund_amount),
-                            );
+                            pending_refunds.push_back((asset_address, refund_amount));
                         }
                     }
                 }
 
-                // Emit overall refund claimed event
-                env.events().publish(
-                    ("campaign", "refund_claimed"),
-                    (&donor, donor_record.total_donated),
-                );
+                // Issue #94 – Only mark the refund claimed when at least one
+                // transfer will actually happen. The mark still precedes every
+                // token interaction (checks-effects-interactions), preserving the
+                // Issue #242 reentrancy posture. A zero-value claim leaves the
+                // donor unclaimed so they can retry if conditions change.
+                if !pending_refunds.is_empty() {
+                    donor_record.refund_claimed = true;
+                    set_donor(&env, &donor, &donor_record);
+
+                    for (asset_address, refund_amount) in pending_refunds.iter() {
+                        // Issue #244 – Verify contract balance before transfer
+                        use soroban_sdk::token;
+                        let token_client = token::Client::new(&env, &asset_address);
+                        let contract_balance =
+                            token_client.balance(&env.current_contract_address());
+                        if contract_balance < refund_amount {
+                            panic_with_error(&env, Error::InsufficientContractBalance);
+                        }
+
+                        // Transfer refund to donor
+                        token_client.transfer(
+                            &env.current_contract_address(),
+                            &donor,
+                            &refund_amount,
+                        );
+
+                        // Emit event for this asset's refund
+                        env.events().publish(
+                            ("campaign", "asset_refund"),
+                            (donor.clone(), asset_address, refund_amount),
+                        );
+                    }
+
+                    // Emit overall refund claimed event
+                    env.events().publish(
+                        ("campaign", "refund_claimed"),
+                        (&donor, donor_record.total_donated),
+                    );
+                }
 
                 refresh_report_cache(&env);
 

@@ -7,7 +7,7 @@
 
 use core::ops::Add;
 
-use soroban_sdk::testutils::{Address as AddressTestUtils, Ledger};
+use soroban_sdk::testutils::{Address as AddressTestUtils, Events, Ledger};
 use soroban_sdk::token::{StellarAssetClient, TokenClient};
 use soroban_sdk::{log, vec, Address, Env, Vec};
 
@@ -644,4 +644,94 @@ fn test_claim_refund_ended_full_refund() {
 
     let contract_balance = token.balance(&contract_address);
     assert_eq!(contract_balance, 0);
+}
+
+// ─── Issue #94 – zero-value claim must not mark refund_claimed ───────────────
+
+/// Issue #94 regression: a claim that transfers nothing (donor has no per-asset
+/// donation recorded, so the pro-rata loop finds no value to move) must NOT
+/// mark `refund_claimed`, must emit no events, and must remain retryable.
+#[test]
+fn test_claim_refund_zero_transfer_leaves_unclaimed() {
+    let env = make_env();
+    env.ledger().set_timestamp(BASE);
+    env.mock_all_auths();
+    // One `as_contract` frame per invocation: re-authorizing the same donor
+    // twice inside a single frame trips "frame is already authorized".
+    let contract_id = env.register_contract(None, CampaignContract);
+
+    let donor = env.as_contract(&contract_id, || {
+        let end_time = env.ledger().timestamp() + 1000;
+        create_test_campaign(&env, CampaignStatus::Cancelled, 1000, end_time, 1);
+        create_test_milestone(&env, 0, 1000, MilestoneStatus::Locked);
+
+        let donor = Address::generate(&env);
+        create_test_donor(&env, &donor, 100, false);
+        // Deliberately no DonorAssetDonation entry: nothing can transfer.
+        donor
+    });
+
+    env.as_contract(&contract_id, || {
+        CampaignContract::claim_refund(env.clone(), donor.clone());
+
+        // The donor must NOT be marked claimed — no value moved.
+        let record = crate::storage::get_donor(&env, &donor).unwrap();
+        assert!(
+            !record.refund_claimed,
+            "zero-value claim must not set refund_claimed"
+        );
+
+        // No refund_claimed / asset_refund event may be emitted for a no-op claim.
+        assert!(
+            env.events().all().events().is_empty(),
+            "zero-value claim must not emit events"
+        );
+    });
+
+    // And the donor can retry: a second call must not panic with
+    // RefundAlreadyClaimed and must still leave the record unclaimed.
+    env.as_contract(&contract_id, || {
+        CampaignContract::claim_refund(env.clone(), donor.clone());
+        let record = crate::storage::get_donor(&env, &donor).unwrap();
+        assert!(!record.refund_claimed);
+    });
+}
+
+/// Issue #94 regression: when everything raised was already released
+/// (refund numerator = 0) the pro-rata refund is 0 for every asset — the claim
+/// transfers nothing and must leave `refund_claimed` false.
+#[test]
+fn test_claim_refund_zero_prorata_leaves_unclaimed() {
+    let env = make_env();
+    env.ledger().set_timestamp(BASE);
+    env.mock_all_auths();
+    with_contract(&env, || {
+        let end_time = env.ledger().timestamp() + 1000;
+        let campaign = create_test_campaign(&env, CampaignStatus::Cancelled, 1000, end_time, 1);
+        // Milestone released in full: raised (1000) == released (1000) → numerator 0.
+        create_test_milestone(&env, 0, 1000, MilestoneStatus::Released);
+
+        let donor = Address::generate(&env);
+        create_test_donor(&env, &donor, 100, false);
+        let token_issuer = campaign
+            .accepted_assets
+            .get(0)
+            .unwrap()
+            .issuer
+            .clone()
+            .unwrap();
+        env.storage().persistent().set(
+            &DataKey::DonorAssetDonation(donor.clone(), token_issuer),
+            &100i128,
+        );
+
+        CampaignContract::claim_refund(env.clone(), donor.clone());
+
+        let record = crate::storage::get_donor(&env, &donor).unwrap();
+        assert!(
+            !record.refund_claimed,
+            "claim with zero pro-rata refund must not set refund_claimed"
+        );
+        assert!(env.events().all().events().is_empty());
+    });
 }
