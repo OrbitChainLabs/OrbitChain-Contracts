@@ -13,4 +13,4 @@ soroban-sdk = { workspace = true }
 common = { workspace = true }
 
 [dev-dependencies]
-soroban-sdk = { version = "26.0.1", features = ["testutils"] }
+soroban-sdk = { version = "27.0.2", features = ["testutils"] }
