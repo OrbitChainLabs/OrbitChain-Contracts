@@ -13,67 +13,59 @@
 # Rust Soroban contracts — the canonical on-chain API surface.
 api:
   - changed-files:
-      - any-glob-to-any-file:
-          - "campaign/**"
-          - "common/**"
-          - "token-bridge/**"
-          - "crates/contracts/core/**"
-          - "crates/contracts/batch-donor/**"
+      - any-glob-to-any-file: "campaign/**"
+      - any-glob-to-any-file: "common/**"
+      - any-glob-to-any-file: "token-bridge/**"
+      - any-glob-to-any-file: "crates/contracts/core/**"
+      - any-glob-to-any-file: "crates/contracts/batch-donor/**"
 
 # Native CLI tooling (`cargo run -p orbitchain-tools -- …`).
 cli:
   - changed-files:
-      - any-glob-to-any-file:
-          - "crates/tools/**"
+      - any-glob-to-any-file: "crates/tools/**"
 
 # Frontend / mobile-wallet surfaces (Playwright + wallet integration).
 frontend:
   - changed-files:
-      - any-glob-to-any-file:
-          - "wallet_connect.html"
-          - "wallet_connect.js"
-          - "tests/e2e/**"
-          - "playwright.config.js"
+      - any-glob-to-any-file: "wallet_connect.html"
+      - any-glob-to-any-file: "wallet_connect.js"
+      - any-glob-to-any-file: "tests/e2e/**"
+      - any-glob-to-any-file: "playwright.config.js"
 
 # CI / build infrastructure.
 ci:
   - changed-files:
-      - any-glob-to-any-file:
-          - ".github/workflows/**"
-          - ".github/*.md"
-          - ".github/ISSUE_TEMPLATE/**"
-          - ".cargo/**"
-          - "rust-toolchain.toml"
-          - "Cargo.toml"
-          - "Cargo.lock"
+      - any-glob-to-any-file: ".github/workflows/**"
+      - any-glob-to-any-file: ".github/*.md"
+      - any-glob-to-any-file: ".github/ISSUE_TEMPLATE/**"
+      - any-glob-to-any-file: ".cargo/**"
+      - any-glob-to-any-file: "rust-toolchain.toml"
+      - any-glob-to-any-file: "Cargo.toml"
+      - any-glob-to-any-file: "Cargo.lock"
 
 # Documentation and reference material.
 documentation:
   - changed-files:
-      - any-glob-to-any-file:
-          - "docs/**"
-          - "**/*.md"
+      - any-glob-to-any-file: "docs/**"
+      - any-glob-to-any-file: "**/*.md"
 
 # Persistent / temporary storage backend code paths.
 storage:
   - changed-files:
-      - any-glob-to-any-file:
-          - "**/storage*.rs"
-          - "**/backend.rs"
+      - any-glob-to-any-file: "**/storage*.rs"
+      - any-glob-to-any-file: "**/backend.rs"
 
 # Tests / property-based / fuzz harnesses.
 testing:
   - changed-files:
-      - any-glob-to-any-file:
-          - "**/tests/**"
-          - "**/*test*.rs"
-          - "**/proptest-strategies/**"
-          - "**/fuzz_targets/**"
-          - "fuzz/**"
+      - any-glob-to-any-file: "**/tests/**"
+      - any-glob-to-any-file: "**/*test*.rs"
+      - any-glob-to-any-file: "**/proptest-strategies/**"
+      - any-glob-to-any-file: "**/fuzz_targets/**"
+      - any-glob-to-any-file: "fuzz/**"
 
 # Security process and security-sensitive code.
 security:
   - changed-files:
-      - any-glob-to-any-file:
-          - "SECURITY.md"
-          - "**/security*.rs"
+      - any-glob-to-any-file: "SECURITY.md"
+      - any-glob-to-any-file: "**/security*.rs"
