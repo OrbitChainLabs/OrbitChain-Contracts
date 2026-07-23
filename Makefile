@@ -7,7 +7,7 @@
 ##   make clippy       - Lint code
 
 .PHONY: build build-wasm build-tools test fmt lint clean optimize help e2e \
-        setup deploy-testnet deploy-sandbox sandbox-start audit deny fuzz
+        setup deploy-testnet deploy-sandbox sandbox-start audit deny fuzz codegen
 
 # Default target
 build: build-wasm build-tools
@@ -42,6 +42,28 @@ lint:
 	@echo "🔍 Running linter..."
 	cargo clippy --workspace -- -D warnings
 	@echo "✅ Linting passed"
+
+# Regenerate event schema JSON from #[contractevent] structs.
+# Runs the campaign crate's build.rs on the host target to extract event
+# definitions and write codegen/schemas/events.json.
+codegen:
+	@echo "🔧 Generating event schema..."
+	@LOG=$$(mktemp); \
+	cargo check -p orbitchain-campaign 2>$$LOG; \
+	status=$$?; \
+	if [ -f codegen/schemas/events.json ]; then \
+		echo "✅ Event schema written to codegen/schemas/events.json"; \
+		echo "   Run 'git diff codegen/schemas/events.json' to review changes."; \
+		rm -f $$LOG; \
+	else \
+		echo "❌ Schema generation failed."; \
+		echo "   Build output:"; \
+		cat $$LOG 2>/dev/null; \
+		echo ""; \
+		echo "   Try: cargo check -p orbitchain-campaign"; \
+		rm -f $$LOG; \
+		exit 1; \
+	fi
 
 # Clean build artifacts
 clean:
@@ -125,6 +147,7 @@ help:
 	@echo "  make test           - Run all tests"
 	@echo "  make fmt            - Format code"
 	@echo "  make lint           - Run linter"
+	@echo "  make codegen        - Regenerate codegen/schemas/events.json"
 	@echo "  make clean          - Clean build artifacts"
 	@echo "  make sandbox-start  - Start local Stellar sandbox (requires Docker)"
 	@echo "  make deploy-sandbox - Deploy contract to local sandbox"

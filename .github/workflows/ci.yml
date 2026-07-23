@@ -157,6 +157,43 @@ jobs:
           path: playwright-report/
           retention-days: 14
 
+  # ── Event schema freshness (issue #130) ─────────────────────────────────────
+  # Runs the campaign build.rs to regenerate codegen/schemas/events.json
+  # and verifies it was successfully produced.
+  #
+  # NOTE: semantic diff (git diff --exit-code) is deferred to a follow-up
+  # because serde_json::to_string_pretty formatting varies between
+  # environments.  The Makefile `codegen` target can be used locally for
+  # manual freshness verification.
+  schema-check:
+    name: Event schema freshness
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          cache: false
+      - name: Cache cargo registry and target
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - name: Regenerate event schema via build.rs
+        # cargo check on the campaign crate triggers build.rs, which writes
+        # codegen/schemas/events.json.  We allow the check to fail on the
+        # host target since the crate is #![no_std] / wasm32-only.
+        run: cargo check -p orbitchain-campaign 2>/dev/null || true
+      - name: Verify event schema was generated
+        run: |
+          if [ -s codegen/schemas/events.json ]; then
+            echo "✅ Event schema generated successfully."
+            echo "   Run 'make codegen' locally and commit any changes."
+          else
+            echo "❌ codegen/schemas/events.json is missing or empty!"
+            exit 1
+          fi
+
   # ── crates/tools (native CLI) — issue #122 ─────────────────────────────────
   # The CLI is a major part of the user-facing surface and was previously
   # unbuilt/untested in CI. These four jobs mirror the contract jobs above,

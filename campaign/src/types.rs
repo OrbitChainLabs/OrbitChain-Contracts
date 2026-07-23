@@ -561,7 +561,7 @@ impl DonorRecord {
     }
 }
 
-// ─── Events ───────────────────────────────────────────────────────────────────
+// ─── Report & response types ───────────────────────────────────────────────
 
 /// Response type for `get_campaign_status`.
 #[contracttype]
@@ -609,58 +609,4 @@ pub struct DashboardMetrics {
     pub total_donations: u64,
     pub total_releases: u64,
     pub total_transactions: u64,
-}
-
-/// Emitted by `initialize`.
-#[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct CampaignInitializedEvent {
-    pub creator: Address,
-    pub goal_amount: i128,
-    pub end_time: u64,
-    pub asset_count: u32,
-    pub milestone_count: u32,
-    pub created_at_ledger: u32,
-}
-
-/// Emitted by `donate`.
-#[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct DonationReceivedEvent {
-    pub donor: Address,
-    pub amount: i128,
-    pub asset: AssetInfo,
-    pub new_total_raised: i128,
-    pub ledger: u32,
-}
-
-/// Emitted by `release_milestone` and `release_milestone_multi_asset`.
-/// One event per asset transfer.
-#[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct MilestoneReleasedEvent {
-    pub milestone_index: u32,
-    pub amount: i128,
-    pub asset_code: String,
-    pub recipient: Address,
-    pub timestamp: u64,
-}
-
-/// Emitted by campaign status transitions.
-#[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct CampaignStatusChangedEvent {
-    pub from: CampaignStatus,
-    pub to: CampaignStatus,
-    pub ledger: u32,
-}
-
-/// Emitted when a refund is processed.
-#[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct RefundProcessedEvent {
-    pub donor: Address,
-    pub amount: i128,
-    pub asset: AssetInfo,
-    pub ledger: u32,
 }
