@@ -1,7 +1,8 @@
 // src/storage.rs
 
 use crate::types::{
-    CampaignData, CampaignReport, DataKey, DonorRecord, Error, MilestoneData, MilestoneStatus,
+    CampaignData, CampaignReport, DataKey, DonationReceipt, DonorRecord, Error, MilestoneData,
+    MilestoneStatus,
 };
 use soroban_sdk::{panic_with_error, Address, Env, Vec};
 
@@ -487,6 +488,54 @@ pub fn block_asset(env: &Env, asset: &Address) {
 pub fn unblock_asset(env: &Env, asset: &Address) {
     let key = DataKey::BlockedAsset(asset.clone());
     env.storage().persistent().set(&key, &false);
+    bump_persistent(env, &key);
+}
+
+// ─── Donation receipts (issue #146) ───────────────────────────────────────────
+
+/// Persist a donor's soulbound receipt and refresh its TTL.
+///
+/// Only ever written by `receipt::claim_receipt`, which enforces the
+/// finalised-campaign and not-already-claimed preconditions.
+pub fn set_receipt(env: &Env, donor: &Address, receipt: &DonationReceipt) {
+    let key = DataKey::ReceiptData(donor.clone());
+    env.storage().persistent().set(&key, receipt);
+    bump_persistent(env, &key);
+}
+
+/// Load a donor's receipt. `None` means it has not been claimed.
+pub fn get_receipt(env: &Env, donor: &Address) -> Option<DonationReceipt> {
+    let key = DataKey::ReceiptData(donor.clone());
+    let value = env.storage().persistent().get(&key)?;
+    bump_persistent(env, &key);
+    Some(value)
+}
+
+/// Whether this donor has already claimed a receipt.
+///
+/// Presence of the key is the already-claimed guard — a receipt is never
+/// removed, so this can only go false -> true.
+#[must_use]
+pub fn has_receipt(env: &Env, donor: &Address) -> bool {
+    env.storage()
+        .persistent()
+        .has(&DataKey::ReceiptData(donor.clone()))
+}
+
+/// Number of receipts claimed so far. Zero before the first claim.
+#[must_use]
+pub fn get_receipt_count(env: &Env) -> u32 {
+    env.storage()
+        .persistent()
+        .get(&DataKey::ReceiptCount)
+        .unwrap_or(0)
+}
+
+/// Increment the claimed-receipt counter, saturating rather than wrapping.
+pub fn increment_receipt_count(env: &Env) {
+    let next = get_receipt_count(env).saturating_add(1);
+    let key = DataKey::ReceiptCount;
+    env.storage().persistent().set(&key, &next);
     bump_persistent(env, &key);
 }
 
