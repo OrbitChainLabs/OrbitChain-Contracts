@@ -5,8 +5,6 @@
 
 #![cfg(test)]
 
-use core::ops::Add;
-
 use soroban_sdk::testutils::{Address as AddressTestUtils, Ledger};
 use soroban_sdk::token::{StellarAssetClient, TokenClient};
 use soroban_sdk::{log, vec, Address, Env, Vec};

@@ -33,7 +33,10 @@ pub struct CampaignInitialized {
 /// passed or concluded normally).
 #[contractevent(topics = ["campaign", "campaign_ended"])]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct CampaignEndedEvent;
+pub struct CampaignEnded {
+    /// Ledger timestamp when the campaign concluded.
+    pub timestamp: u64,
+}
 
 /// Emitted when the campaign creator cancels the campaign.
 #[contractevent(topics = ["campaign", "campaign_cancelled"])]
@@ -103,7 +106,7 @@ pub struct ContractUpgraded {
 /// operations.
 #[contractevent(topics = ["campaign", "contract_frozen"])]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ContractFrozenEvent {
+pub struct ContractFrozen {
     /// Admin (creator) address.
     pub admin: Address,
     /// Ledger timestamp of the freeze.
@@ -124,7 +127,7 @@ pub struct ContractUnfrozen {
 /// Emitted when an asset is blocked by the admin.
 #[contractevent(topics = ["campaign", "asset_blocked"])]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct AssetBlockedEvent {
+pub struct AssetBlocked {
     /// Admin (creator) address.
     pub admin: Address,
     /// Token contract address of the blocked asset.
@@ -250,7 +253,10 @@ pub fn campaign_cancelled(env: &Env, creator: &Address) {
 
 /// Emitted when the campaign ends (deadline passed or ended early).
 pub fn campaign_ended(env: &Env) {
-    CampaignEndedEvent.publish(env);
+    CampaignEnded {
+        timestamp: env.ledger().timestamp(),
+    }
+    .publish(env);
 }
 
 /// Emitted when milestone funds are released to the recipient.
@@ -284,7 +290,7 @@ pub fn contract_upgraded(env: &Env, admin: &Address, new_wasm_hash: BytesN<32>, 
 
 /// Emitted when the contract is frozen by the admin.
 pub fn contract_frozen(env: &Env, admin: &Address, timestamp: u64) {
-    ContractFrozenEvent {
+    ContractFrozen {
         admin: admin.clone(),
         timestamp,
     }
@@ -302,7 +308,7 @@ pub fn contract_unfrozen(env: &Env, admin: &Address, timestamp: u64) {
 
 /// Emitted when an asset is blocked by the admin.
 pub fn asset_blocked(env: &Env, admin: &Address, asset: &Address, timestamp: u64) {
-    AssetBlockedEvent {
+    AssetBlocked {
         admin: admin.clone(),
         asset: asset.clone(),
         timestamp,
