@@ -15,7 +15,9 @@ the release process rejects a missed deprecation.
 
 ## [Unreleased]
 
-Tracks the open PR that closes issues #131 (JS dApp tutorial),
+Tracks the open PR that closes issues #130 (event schema codegen),
+[#131](https://github.com/OrbitChainLabs/OrbitChain-Contracts/issues/131)
+(JS dApp tutorial),
 [#147](https://github.com/OrbitChainLabs/OrbitChain-Contracts/issues/147)
 (batched multi-campaign donations) and
 [#151](https://github.com/OrbitChainLabs/OrbitChain-Contracts/issues/151)
@@ -24,6 +26,15 @@ land these as `0.2.0` (a minor bump, see `PROCESS.md` § "Pre-1.0 caveat").
 
 ### Added
 
+- Machine-readable event schema codegen pipeline (issue
+  [#130](https://github.com/OrbitChainLabs/OrbitChain-Contracts/issues/130)):
+  - `campaign/build.rs` extracts `#[contractevent]` structs from
+    `src/event.rs` and emits `codegen/schemas/events.json` as a JSON Schema
+    document for downstream front-end and indexer consumers.
+  - All campaign events migrated from deprecated `Events::publish` to typed
+    `#[contractevent]` structs with backwards-compatible wrapper functions.
+  - CI freshness check (`make codegen`) ensures the committed schema never
+    drifts from the Rust definitions.
 - `orbitchain-batch-donor` Soroban contract crate under `crates/contracts/batch-donor/`
   exposing two entrypoints:
   - `batch_donate(env, operator, targets)` — atomic multi-campaign donation
