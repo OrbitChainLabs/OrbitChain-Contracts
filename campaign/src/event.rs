@@ -112,3 +112,23 @@ pub fn asset_unblocked(env: &Env, admin: &Address, asset: &Address, timestamp: u
     env.events()
         .publish(("campaign", "asset_unblocked"), (admin, asset, timestamp));
 }
+
+/// Issue #146 – Emitted when a donor claims their soulbound donation receipt.
+///
+/// Topic mirrors the `donation_received` shape (name + contract address) so
+/// off-chain indexers can subscribe per-campaign. `amount_donated` is the
+/// donor's cumulative contribution snapshotted at mint time.
+pub fn receipt_minted(
+    env: &Env,
+    donor: &Address,
+    amount_donated: i128,
+    receipt_number: u32,
+    timestamp: u64,
+) {
+    let topics = (
+        Symbol::new(env, "receipt_minted"),
+        env.current_contract_address(),
+    );
+    env.events()
+        .publish(topics, (donor, amount_donated, receipt_number, timestamp));
+}
