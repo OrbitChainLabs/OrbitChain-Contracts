@@ -281,9 +281,17 @@ fn extract_events(source: &str) -> Vec<EventDef> {
             None => continue,
         };
 
-        // Derive event name from struct name (PascalCase → snake_case)
+        // Derive event name for the schema: use the last topic element when
+        // explicit topics are provided (e.g. "campaign_ended" from
+        // ["campaign", "campaign_ended"]), otherwise fall back to the
+        // snake-cased struct name.
         let struct_name = item_struct.ident.to_string();
-        let event_name = to_snake_case(&struct_name);
+        let fallback_name = to_snake_case(&struct_name);
+        let event_name = if meta.topics.is_empty() {
+            fallback_name.clone()
+        } else {
+            meta.topics.last().unwrap_or(&fallback_name).clone()
+        };
 
         // Use custom topics if provided, otherwise derive from struct name
         let topics = if meta.topics.is_empty() {
