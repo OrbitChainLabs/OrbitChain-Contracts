@@ -157,6 +157,7 @@ to. Tracker: [issue #37](https://github.com/OrbitChainLabs/OrbitChain-Contracts/
 | `orbitchain-cli signing …` | ✅ Implemented | `handle_signing` (5 sub-commands) | Use as-is |
 | `orbitchain-cli response …` | ✅ Implemented | `handle_response` (5 sub-commands) | Use as-is |
 | `orbitchain-cli deploy` | ✅ Implemented | Rust mirror of `scripts/deploy.sh` with typed args, idempotency + `--force`, per-network env overrides (#135) | `orbitchain-cli deploy testnet` (script kept for back-compat) |
+| `orbitchain-cli bump-storage --id <CID> --operator-secret-key <S>` | ✅ Implemented | `handle_bump_storage` in `crates/tools/src/main.rs`; logic in `crates/tools/src/bump_storage.rs` | `orbitchain-cli bump-storage --id <CID> --operator-secret-key <S>` |
 | `orbitchain-cli invoke` | ✅ Implemented | `invoke::handle` in `crates/tools/src/invoke.rs` (Issue #136) — wraps `stellar contract invoke`, resolving the signing key from `--source-key` / `SOROBAN_ADMIN_SECRET_KEY` / the encrypted vault | Use `orbitchain-cli invoke --id <C…> --method <m> [--args-json '{…}'] [--network <net>] [--send <default\|no\|yes>]` (requires the `stellar` binary, `make setup`) |
 | `orbitchain-cli account` | ⚠️ **Stub** | `handle_account` prints an "NOT yet implemented" banner | Use `orbitchain-cli keypair generate-master` (creation) or `keypair fund` (testnet funding) |
 | `orbitchain-cli account create` | ❌ **Missing** | not in the dispatcher → `Unknown command` | Use `orbitchain-cli keypair generate-master` |

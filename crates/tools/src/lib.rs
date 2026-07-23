@@ -5,6 +5,7 @@
 //! durable off-chain withdrawal audit logging.
 
 pub mod asset_issuing;
+pub mod bump_storage;
 pub mod deploy;
 pub mod encrypted_vault;
 pub mod environment_config;

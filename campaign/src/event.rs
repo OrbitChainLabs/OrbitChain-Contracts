@@ -101,6 +101,20 @@ pub fn contract_unfrozen(env: &Env, admin: &Address, timestamp: u64) {
         .publish(("campaign", "contract_unfrozen"), (admin, timestamp));
 }
 
+/// Issue #57 – Emitted when the creator grants operator status to an address.
+pub fn operator_added(env: &Env, creator: &Address, operator: &Address, timestamp: u64) {
+    env.events().publish(
+        ("campaign", "operator_added"),
+        (creator, operator, timestamp),
+    );
+}
+
+/// Issue #57 – Emitted when an authorised operator refreshes storage TTLs.
+pub fn storage_bumped(env: &Env, operator: &Address, timestamp: u64) {
+    env.events()
+        .publish(("campaign", "storage_bumped"), (operator, timestamp));
+}
+
 /// Issue #90 – Emitted when an asset is blocked by the admin.
 pub fn asset_blocked(env: &Env, admin: &Address, asset: &Address, timestamp: u64) {
     env.events()
