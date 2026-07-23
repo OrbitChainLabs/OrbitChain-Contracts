@@ -1,7 +1,7 @@
 // src/types.rs
 
 use soroban_sdk::{
-    contracterror, contracttype, panic_with_error, Address, BytesN, Env, String, Vec,
+    contracterror, contracttype, panic_with_error, Address, Bytes, BytesN, Env, Map, String, Vec,
 };
 
 // ─── Error enum ───────────────────────────────────────────────────────────────
@@ -116,6 +116,31 @@ pub enum Error {
     // ── Asset block ───────────────────────────────────────────────────── 9x
     /// Donations in this asset are blocked by the admin.
     AssetBlocked = 90,
+
+    // Codes 91–93 are reserved by the in-flight donation-receipt work (#158).
+
+    // ── Issue #92 – timelock + multi-sig admin ──────────────────────────────
+    /// Caller is not a member of the admin signer set.
+    NotAdminSigner = 94,
+    /// No admin action exists under the given id (never proposed, or already
+    /// executed — actions are deleted on execution to prevent replay).
+    ActionNotFound = 95,
+    /// The action's `execute_after` timestamp has not been reached yet.
+    TimelockNotElapsed = 96,
+    /// The action has fewer approvals than the required quorum.
+    InsufficientApprovals = 97,
+    /// This signer has already approved the action.
+    AlreadyApproved = 98,
+    /// The action payload does not match its kind (e.g. an `Upgrade` payload
+    /// that is not exactly 32 bytes).
+    InvalidActionPayload = 99,
+    /// Direct admin calls are disabled while a multi-sig signer set (≥2
+    /// signers) is configured; use the propose/approve/execute flow.
+    MultisigActive = 100,
+    /// `execute_after` lies in the past at proposal time.
+    InvalidExecuteAfter = 101,
+    /// The proposed signer set is invalid (empty or contains duplicates).
+    InvalidSigners = 102,
 }
 
 #[cfg(test)]
@@ -167,6 +192,15 @@ mod error_code_tests {
             Error::InvalidAmount as u32,
             Error::ContractFrozen as u32,
             Error::AssetBlocked as u32,
+            Error::NotAdminSigner as u32,
+            Error::ActionNotFound as u32,
+            Error::TimelockNotElapsed as u32,
+            Error::InsufficientApprovals as u32,
+            Error::AlreadyApproved as u32,
+            Error::InvalidActionPayload as u32,
+            Error::MultisigActive as u32,
+            Error::InvalidExecuteAfter as u32,
+            Error::InvalidSigners as u32,
         ];
         for (index, code) in campaign_codes.iter().enumerate() {
             assert!(!campaign_codes[index + 1..].contains(code));
@@ -324,6 +358,16 @@ pub enum DataKey {
     /// clients read one entry instead of recomputing from campaign +
     /// milestones + counters on every call.
     CachedReport,
+
+    // ── Persistent (appended — issue #92) ───────────────────────────────────
+    /// A proposed admin action (timelock + multi-sig flow), keyed by id.
+    /// Deleted on execution so an action can never be replayed.
+    AdminAction(u64),
+    /// Number of admin actions ever proposed; the next proposal takes this id.
+    AdminActionCount,
+    /// The admin signer set. Absent = `[creator]`, the backwards-compatible
+    /// 1-of-1 quorum.
+    AdminSigners,
 }
 
 // ─── Asset types ──────────────────────────────────────────────────────────────
@@ -663,4 +707,39 @@ pub struct RefundProcessedEvent {
     pub amount: i128,
     pub asset: AssetInfo,
     pub ledger: u32,
+}
+
+// ─── Issue #92 – timelock + multi-sig admin governance ───────────────────────
+
+/// The kind of privileged operation an [`AdminAction`] performs.
+///
+/// Encodes by variant name (`contracttype`), so appending new kinds is safe.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ActionKind {
+    /// Replace the contract WASM. Payload: the 32-byte new WASM hash.
+    Upgrade,
+    /// Freeze the contract (block all mutating operations). Payload: empty.
+    Freeze,
+    /// Unfreeze the contract. Payload: empty.
+    Unfreeze,
+    /// Extend the campaign deadline. Payload: the new end time as 8 bytes,
+    /// big-endian `u64`.
+    ExtendDeadline,
+}
+
+/// Issue #92 – A proposed admin action moving through the timelock +
+/// multi-sig flow: proposed, approved by the signer quorum, then executed
+/// once `execute_after` has passed.
+#[contracttype]
+#[derive(Clone, Debug)]
+pub struct AdminAction {
+    /// Which privileged operation this action performs.
+    pub kind: ActionKind,
+    /// Kind-specific payload (see [`ActionKind`] variants for the encoding).
+    pub payload: Bytes,
+    /// Ledger timestamp before which the action cannot execute (timelock).
+    pub execute_after: u64,
+    /// Signers who have approved. Proposing counts as the first approval.
+    pub voters: Map<Address, bool>,
 }
