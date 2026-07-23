@@ -7,12 +7,7 @@
 //! remaining behavior is gradually migrated into the canonical contract.
 
 #![no_std]
-// `Events::publish` and the bare `env.register_contract` test helper are
-// marked deprecated in soroban-sdk 26.x in favour of `#[contractevent]` and
-// `env.register`. Migrating every call site here is tracked as a follow-up
-// issue; suppressing the warning keeps CI clean without changing the
-// published event topics or test behaviour.
-#![allow(deprecated)]
+pub mod events;
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, symbol_short, vec, Address, Env, String,
     Symbol, Vec,
@@ -56,7 +51,6 @@ pub enum CoreError {
     /// The withdrawal amount must be greater than zero.
     InvalidWithdrawalAmount = 12,
 }
-
 // ── Storage key helpers ──────────────────────────────────────────────────────
 
 fn campaign_key(id: u64) -> (Symbol, u64) {
@@ -282,9 +276,7 @@ impl OrbitChainContract {
             .instance()
             .set(&symbol_short!("count"), &count);
 
-        // Emit CampaignCreated event
-        env.events()
-            .publish((Symbol::new(&env, "CampaignCreated"), creator), count);
+        events::campaign_created(&env, creator, count);
 
         count
     }
@@ -384,11 +376,7 @@ impl OrbitChainContract {
                 .set(&donors_key(campaign_id), &donors);
         }
 
-        // Emit DonationReceived event
-        env.events().publish(
-            (Symbol::new(&env, "DonationReceived"), donor, campaign_id),
-            (amount, asset, memo),
-        );
+        events::donation_received(&env, donor, campaign_id, amount, asset, memo);
 
         // Issue #142 – increment global transaction counter
         let tx_count: u64 = env.storage().instance().get(&total_tx_key()).unwrap_or(0);
@@ -566,14 +554,7 @@ impl OrbitChainContract {
             .instance()
             .set(&total_withdrawals_key(), &(withdrawal_count + 1));
 
-        env.events().publish(
-            (
-                Symbol::new(&env, "WithdrawalRequested"),
-                creator,
-                campaign_id,
-            ),
-            (recipient, amount),
-        );
+        events::withdrawal_requested(&env, creator, campaign_id, recipient, amount);
     }
 
     /// Issue #131 – admin approves a pending withdrawal request.
@@ -618,10 +599,7 @@ impl OrbitChainContract {
             .persistent()
             .set(&pending_withdrawal_key(campaign_id), &request);
 
-        env.events().publish(
-            (Symbol::new(&env, "WithdrawalApproved"), admin, campaign_id),
-            request.amount,
-        );
+        events::withdrawal_approved(&env, admin, campaign_id, request.amount);
 
         request
     }
@@ -657,14 +635,7 @@ impl OrbitChainContract {
             .persistent()
             .set(&pending_withdrawal_key(campaign_id), &request);
 
-        env.events().publish(
-            (
-                Symbol::new(&env, "TransactionSubmitted"),
-                admin,
-                campaign_id,
-            ),
-            request.amount,
-        );
+        events::transaction_submitted(&env, admin, campaign_id, request.amount);
 
         request
     }
@@ -806,7 +777,7 @@ mod tests {
     #[test]
     fn test_ping() {
         let env = Env::default();
-        let contract_id = env.register_contract(None, OrbitChainContract);
+        let contract_id = env.register(OrbitChainContract, ());
         let client = OrbitChainContractClient::new(&env, &contract_id);
         assert_eq!(client.ping(), 1);
     }
@@ -815,7 +786,7 @@ mod tests {
     fn test_initialize() {
         let env = Env::default();
         env.mock_all_auths();
-        let contract_id = env.register_contract(None, OrbitChainContract);
+        let contract_id = env.register(OrbitChainContract, ());
         let client = OrbitChainContractClient::new(&env, &contract_id);
         let admin = Address::generate(&env);
         client.initialize(&admin);
@@ -827,7 +798,7 @@ mod tests {
         let env = Env::default();
         env.mock_all_auths();
 
-        let contract_id = env.register_contract(None, OrbitChainContract);
+        let contract_id = env.register(OrbitChainContract, ());
         let client = OrbitChainContractClient::new(&env, &contract_id);
 
         let admin = Address::generate(&env);
@@ -864,7 +835,7 @@ mod tests {
     fn test_validate_recipient() {
         let env = Env::default();
         env.mock_all_auths();
-        let contract_id = env.register_contract(None, OrbitChainContract);
+        let contract_id = env.register(OrbitChainContract, ());
         let client = OrbitChainContractClient::new(&env, &contract_id);
         let recipient = Address::generate(&env);
         assert!(client.validate_recipient(&recipient));
@@ -875,7 +846,7 @@ mod tests {
     fn test_withdraw_and_approve() {
         let env = Env::default();
         env.mock_all_auths();
-        let contract_id = env.register_contract(None, OrbitChainContract);
+        let contract_id = env.register(OrbitChainContract, ());
         let client = OrbitChainContractClient::new(&env, &contract_id);
 
         let admin = Address::generate(&env);
@@ -912,7 +883,7 @@ mod tests {
     fn test_submit_transaction() {
         let env = Env::default();
         env.mock_all_auths();
-        let contract_id = env.register_contract(None, OrbitChainContract);
+        let contract_id = env.register(OrbitChainContract, ());
         let client = OrbitChainContractClient::new(&env, &contract_id);
 
         let admin = Address::generate(&env);
@@ -940,7 +911,7 @@ mod tests {
     fn test_prevent_double_withdrawal() {
         let env = Env::default();
         env.mock_all_auths();
-        let contract_id = env.register_contract(None, OrbitChainContract);
+        let contract_id = env.register(OrbitChainContract, ());
         let client = OrbitChainContractClient::new(&env, &contract_id);
 
         let admin = Address::generate(&env);
@@ -965,7 +936,7 @@ mod tests {
     fn test_total_tx_count() {
         let env = Env::default();
         env.mock_all_auths();
-        let contract_id = env.register_contract(None, OrbitChainContract);
+        let contract_id = env.register(OrbitChainContract, ());
         let client = OrbitChainContractClient::new(&env, &contract_id);
 
         let admin = Address::generate(&env);
@@ -995,7 +966,7 @@ mod tests {
         n: u32,
     ) -> (OrbitChainContractClient<'_>, Address, Address, Vec<u64>) {
         env.mock_all_auths();
-        let contract_id = env.register_contract(None, OrbitChainContract);
+        let contract_id = env.register(OrbitChainContract, ());
         let client = OrbitChainContractClient::new(env, &contract_id);
         let admin = Address::generate(env);
         client.initialize(&admin);
@@ -1087,7 +1058,7 @@ mod tests {
     fn test_campaign_report_progress_clamped() {
         let env = Env::default();
         env.mock_all_auths();
-        let contract_id = env.register_contract(None, OrbitChainContract);
+        let contract_id = env.register(OrbitChainContract, ());
         let client = OrbitChainContractClient::new(&env, &contract_id);
         let admin = Address::generate(&env);
         client.initialize(&admin);
@@ -1159,7 +1130,7 @@ mod tests {
     fn test_dashboard_metrics_empty_contract() {
         let env = Env::default();
         env.mock_all_auths();
-        let contract_id = env.register_contract(None, OrbitChainContract);
+        let contract_id = env.register(OrbitChainContract, ());
         let client = OrbitChainContractClient::new(&env, &contract_id);
         let admin = Address::generate(&env);
         client.initialize(&admin);
@@ -1172,3 +1143,4 @@ mod tests {
         assert_eq!(metrics.total_transactions, 0);
     }
 }
+

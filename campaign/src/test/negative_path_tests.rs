@@ -26,7 +26,6 @@ const BASE: u64 = 86400 * 365;
 fn make_env() -> Env {
     Env::default()
 }
-
 fn default_accepted_assets(env: &Env) -> Vec<StellarAsset> {
     let mut assets: Vec<StellarAsset> = Vec::new(env);
     assets.push_back(StellarAsset {
@@ -767,7 +766,7 @@ fn test_extend_deadline_fails_cancelled() {
 fn test_reentrancy_lock_donate_twice_succeeds() {
     let env = make_env();
     env.mock_all_auths();
-    let contract_id = env.register_contract(None, crate::CampaignContract);
+    let contract_id = env.register(crate::CampaignContract, ());
     let client = CampaignContractClient::new(&env, &contract_id);
 
     let donor = Address::generate(&env);
@@ -1136,3 +1135,4 @@ fn test_extend_deadline_not_frozen_succeeds() {
         assert_eq!(campaign.end_time, new_end);
     });
 }
+
