@@ -112,3 +112,34 @@ pub fn asset_unblocked(env: &Env, admin: &Address, asset: &Address, timestamp: u
     env.events()
         .publish(("campaign", "asset_unblocked"), (admin, asset, timestamp));
 }
+
+// ─── Issue #92 – timelock + multi-sig admin governance ───────────────────────
+
+/// Issue #92 – Emitted when an admin action is proposed. The `execute_after`
+/// timestamp is the community's window to detect a malicious proposal.
+pub fn admin_action_proposed(env: &Env, action_id: u64, proposer: &Address, execute_after: u64) {
+    env.events().publish(
+        ("campaign", "admin_action_proposed"),
+        (action_id, proposer, execute_after),
+    );
+}
+
+/// Issue #92 – Emitted when a signer approves a pending admin action.
+pub fn admin_action_approved(env: &Env, action_id: u64, approver: &Address, approvals: u32) {
+    env.events().publish(
+        ("campaign", "admin_action_approved"),
+        (action_id, approver, approvals),
+    );
+}
+
+/// Issue #92 – Emitted when an admin action is executed.
+pub fn admin_action_executed(env: &Env, action_id: u64, executor: &Address) {
+    env.events()
+        .publish(("campaign", "admin_action_executed"), (action_id, executor));
+}
+
+/// Issue #92 – Emitted when the admin signer set is replaced.
+pub fn admin_signers_updated(env: &Env, signer_count: u32) {
+    env.events()
+        .publish(("campaign", "admin_signers_updated"), signer_count);
+}

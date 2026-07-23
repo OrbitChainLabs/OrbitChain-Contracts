@@ -8,7 +8,7 @@ use crate::storage::{get_campaign, is_frozen, set_campaign};
 use crate::types::{CampaignStatus, Error};
 use crate::validation::validate_campaign_transition;
 use crate::MAX_DEADLINE_GAP_SECONDS;
-use soroban_sdk::{panic_with_error, Env};
+use soroban_sdk::{panic_with_error, Address, Env};
 
 /// Issue #212 – End the campaign early (before deadline).
 ///
@@ -88,10 +88,21 @@ pub fn cancel_campaign(env: &Env) {
 /// - `Error::InvalidEndTime` if `new_end_time` is more than ten years out
 /// - `Error::InvalidCampaignTransition` if campaign is not Active or GoalReached
 pub fn extend_deadline(env: &Env, new_end_time: u64) {
+    // Issue #92 – the direct call is the legacy 1-of-1 path: it auths the
+    // sole admin signer and is rejected once a multi-sig set is configured.
+    let admin = crate::admin::require_direct_admin(env);
+    admin.require_auth();
+
+    apply_extend_deadline(env, new_end_time, &admin);
+}
+
+/// Issue #92 – Validation + mutation of `extend_deadline`, shared by the
+/// direct entrypoint (above, after auth) and the timelock + multi-sig
+/// `execute_admin_action` path (which has already established authority and
+/// must not re-auth the creator).
+pub(crate) fn apply_extend_deadline(env: &Env, new_end_time: u64, actor: &Address) {
     let mut campaign =
         get_campaign(env).unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized));
-
-    campaign.creator.require_auth();
 
     // Freeze invariant: all write operations are rejected while frozen (see freeze()).
     if is_frozen(env) {
@@ -113,7 +124,7 @@ pub fn extend_deadline(env: &Env, new_end_time: u64) {
     campaign.end_time = new_end_time;
     set_campaign(env, &campaign);
 
-    event::deadline_extended(env, &campaign.creator, old_deadline, new_end_time);
+    event::deadline_extended(env, actor, old_deadline, new_end_time);
 }
 
 /// Issue #235 — Get campaign status with computed fields.

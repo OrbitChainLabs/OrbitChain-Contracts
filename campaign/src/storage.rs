@@ -1,7 +1,8 @@
 // src/storage.rs
 
 use crate::types::{
-    CampaignData, CampaignReport, DataKey, DonorRecord, Error, MilestoneData, MilestoneStatus,
+    AdminAction, CampaignData, CampaignReport, DataKey, DonorRecord, Error, MilestoneData,
+    MilestoneStatus,
 };
 use soroban_sdk::{panic_with_error, Address, Env, Vec};
 
@@ -535,6 +536,15 @@ pub fn bump_all_persistent(env: &Env, milestone_count: u32) {
     if env.storage().persistent().has(&report_key) {
         bump_persistent(env, &report_key);
     }
+    // Issue #92 – admin governance keys.
+    let count_key = DataKey::AdminActionCount;
+    if env.storage().persistent().has(&count_key) {
+        bump_persistent(env, &count_key);
+    }
+    let signers_key = DataKey::AdminSigners;
+    if env.storage().persistent().has(&signers_key) {
+        bump_persistent(env, &signers_key);
+    }
     // Legacy per-index entries (pre-#118 layouts, not yet migrated).
     for i in 0..milestone_count {
         let key = DataKey::MilestoneData(i);
@@ -542,4 +552,57 @@ pub fn bump_all_persistent(env: &Env, milestone_count: u32) {
             bump_persistent(env, &key);
         }
     }
+}
+
+// ─── Issue #92 – timelock + multi-sig admin actions ──────────────────────────
+
+/// Store an admin action proposal under its id.
+pub fn set_admin_action(env: &Env, action_id: u64, action: &AdminAction) {
+    let key = DataKey::AdminAction(action_id);
+    env.storage().persistent().set(&key, action);
+    bump_persistent(env, &key);
+}
+
+/// Fetch an admin action proposal, if it exists (executed actions are deleted).
+pub fn get_admin_action(env: &Env, action_id: u64) -> Option<AdminAction> {
+    env.storage()
+        .persistent()
+        .get(&DataKey::AdminAction(action_id))
+}
+
+/// Delete an admin action. Called on execution so an action cannot replay.
+pub fn remove_admin_action(env: &Env, action_id: u64) {
+    env.storage()
+        .persistent()
+        .remove(&DataKey::AdminAction(action_id));
+}
+
+/// Number of admin actions ever proposed; the next proposal takes this id.
+pub fn get_admin_action_count(env: &Env) -> u64 {
+    env.storage()
+        .persistent()
+        .get(&DataKey::AdminActionCount)
+        .unwrap_or(0)
+}
+
+/// Increment the admin action counter, returning the id just consumed.
+pub fn increment_admin_action_count(env: &Env) -> u64 {
+    let id = get_admin_action_count(env);
+    let key = DataKey::AdminActionCount;
+    env.storage().persistent().set(&key, &(id + 1));
+    bump_persistent(env, &key);
+    id
+}
+
+/// The stored admin signer set, if one has been configured.
+/// `None` means the backwards-compatible default: `[creator]`, 1-of-1.
+pub fn get_admin_signers_storage(env: &Env) -> Option<Vec<Address>> {
+    env.storage().persistent().get(&DataKey::AdminSigners)
+}
+
+/// Replace the admin signer set.
+pub fn set_admin_signers_storage(env: &Env, signers: &Vec<Address>) {
+    let key = DataKey::AdminSigners;
+    env.storage().persistent().set(&key, signers);
+    bump_persistent(env, &key);
 }
