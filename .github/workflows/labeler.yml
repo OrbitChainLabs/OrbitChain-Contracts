@@ -1,0 +1,33 @@
+# Pull-request triage (issue #127).
+#
+# Runs `actions/labeler@v5` with the configuration in
+# `.github/labeler.yml`. Each PR gets `api`, `cli`, `frontend`, `ci`,
+# `documentation`, `storage`, `testing`, or `security` applied based on
+# which file globs the PR touches.
+#
+# `pull_request_target` is the official recipe for labeler workflows
+# because the action needs `pull-requests: write` to apply labels, and
+# that permission is only available in the base branch's context.
+# The action itself is read-only against repository code; it does not
+# evaluate `run:` from PRs.
+
+name: Pull Request Labeler
+
+permissions:
+  contents: read
+  pull-requests: write
+
+on:
+  - pull_request_target
+
+jobs:
+  labeler:
+    name: Apply file-glob → label mapping
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Apply labels
+        uses: actions/labeler@v5
+        with:
+          repo-token: "${{ secrets.GITHUB_TOKEN }}"
+          configuration-path: .github/labeler.yml
