@@ -105,7 +105,8 @@ Browser (mobile UA)                 Auth server                Wallet app (Lobst
 `AUTH_SERVER` defaults to `http://localhost:4000` and is overridable via
 `window.ORBITCHAIN_AUTH_SERVER` or `<script data-auth-server="...">` on the
 `wallet_connect.js` tag — point it at your real SEP-10 endpoint in
-production.
+production. **Both override paths are gated by an origin allowlist**; see
+[Page hardening](#page-hardening-csp-sri-strkey-network-allowlists) below.
 
 ### SEP-45 note
 
@@ -116,6 +117,132 @@ currently operates against classic Stellar accounts (`G...` keys), so
 SEP-10 is the correct spec today. SEP-45 support is a natural follow-up
 once campaign donations accept Soroban smart-wallet signers — tracked
 against the same umbrella issue (#37) rather than bundled here.
+
+## Page hardening: CSP, SRI, StrKey, network allowlists
+
+Issue #141. `wallet_connect.html` is the browser front door to a fund-handling
+protocol, so four independent controls sit between a hostile page/network and a
+signature. **Three of the four are environment-specific and a real deployment
+must edit them** — the list below says exactly what to change.
+
+### 1. Content Security Policy
+
+Declared as a `<meta http-equiv="Content-Security-Policy">` in
+`wallet_connect.html`:
+
+```
+default-src 'none'; script-src 'self' https://cdnjs.cloudflare.com;
+style-src 'self'; img-src 'self' data:;
+connect-src 'self' http://localhost:4000;
+form-action 'none'; base-uri 'none'
+```
+
+`default-src 'none'` denies every fetch type; each directive re-opens exactly
+one. Two things to know before deploying:
+
+- **`connect-src` hard-codes the dev auth-server origin.** The page is served
+  on `:8055` and the reference SEP-10 server on `:4000`, so `'self'` alone
+  breaks the handshake. A `<meta>` CSP cannot be templated per environment —
+  **replace `http://localhost:4000` with your production auth origin.**
+- **`frame-ancestors` is deliberately absent.** Browsers ignore it (along with
+  `report-uri` and `sandbox`) when the policy arrives via `<meta>`, so listing
+  it would buy nothing and log a console warning. Send it as a real HTTP header
+  instead — clickjacking protection for a wallet page is worth the server
+  config:
+
+  ```
+  Content-Security-Policy: frame-ancestors 'none'
+  ```
+
+Because `style-src` is `'self'` with no hashes and no `'unsafe-inline'`, all
+CSS lives in `wallet_connect.css`. Setting `el.style.display` from JS (which
+`createDomUi` does throughout) is CSSOM, **not** an inline style attribute, so
+it is unaffected — `tests/e2e/wallet-connect-csp.spec.js` verifies that in a
+real browser rather than assuming it.
+
+### 2. Subresource integrity on the Freighter CDN script
+
+```html
+<script
+  src="https://cdnjs.cloudflare.com/ajax/libs/stellar-freighter-api/6.0.1/index.min.js"
+  integrity="sha256-15dCnPl/mmfxmZkQgwqJ3AHVZa7euvtlGhGx7QA6fp0="
+  crossorigin="anonymous"
+  defer
+></script>
+```
+
+If cdnjs ever serves different bytes the browser refuses to execute the script
+and the page fails closed to manual entry. `crossorigin="anonymous"` is
+mandatory for SRI on a cross-origin script; cdnjs answers with
+`Access-Control-Allow-Origin: *`, which the e2e spec asserts rather than
+assumes.
+
+The same hash is pinned in `wallet_connect.test.js` (`FREIGHTER_SRI_HASH`) so
+drift fails CI loudly instead of silently disabling Freighter. To re-verify or
+to bump the pinned version:
+
+```bash
+curl -s https://cdnjs.cloudflare.com/ajax/libs/stellar-freighter-api/6.0.1/index.min.js \
+  | openssl dgst -sha256 -binary | openssl base64 -A
+```
+
+Update the hash in **both** places, and only after reviewing what changed.
+
+### 3. Real StrKey validation
+
+`isValidPublicKey` decodes the address instead of pattern-matching it: strict
+RFC 4648 base32 → 35 bytes → SEP-23 version byte (`6 << 3` for `G`) →
+CRC16-XModem checksum over the first 33 bytes, compared little-endian against
+the last two. The previous `/^G[A-Z2-7]{55}$/` regex accepted any 56-character
+base32 string, including every mistyped or truncated paste.
+
+Secret keys (`S…`) decode successfully and are **rejected**, with their own
+error message — a wallet-connect page must never accept a secret. Both the
+desktop manual form and the mobile SEP-10 entry point route through this one
+validator; `startMobileConnect` previously checked only the first character and
+the length.
+
+No dependency was added: the decoder is ~60 lines of vanilla JS (the page has
+no bundler). `wallet_connect.test.js` cross-validates it against
+`@stellar/stellar-sdk`'s `StrKey` over a fixture table plus 400 generated keys
+and single-character corruptions, so correctness is proven against the
+reference implementation without shipping it to the browser.
+
+> **Migration note.** Sessions saved in `localStorage` under the old regex may
+> now fail validation on restore. `readSession` discards them, so the effect is
+> "the user reconnects" — the correct degradation, and covered by a test.
+
+### 4. Network allowlists
+
+Deliberately redundant with `connect-src`: CSP is the browser's enforcement,
+these are the page's own. Same defence-in-depth idiom as
+`assert_asset_is_accepted` in `campaign/src/asset_auth.rs`.
+
+| Allowlist | Where | Behaviour when it fails |
+|---|---|---|
+| `AUTH_ORIGIN_ALLOWLIST` | `wallet_connect.js`, next to `resolveAuthServer()` | Falls back to the default auth server, logs to the console, and surfaces `Error: …` in the `#status` live region. The rejected origin is **never fetched.** |
+| `NETWORK_PASSPHRASE_ALLOWLIST` | `Sep10.fetchChallenge` | Throws before the challenge reaches a wallet. |
+
+**Pointing the page at a non-default auth server** takes two edits, and the
+unit tests will tell you if you only make one:
+
+1. Add the origin to `AUTH_ORIGIN_ALLOWLIST` in `wallet_connect.js`. The list
+   ships with `http://localhost:4000`, `http://127.0.0.1:4000`, and
+   `https://auth.orbitchain.invalid` — the last is a **placeholder**, using the
+   RFC 2606 reserved `.invalid` TLD precisely so it can never resolve. Replace
+   it with the real origin once the production auth server exists.
+2. Add the same origin to `connect-src` in the CSP meta tag, or the browser
+   blocks the request even though the JS allowed it.
+
+Only the *origin* is matched, so a path-carrying endpoint
+(`https://auth.example.com/sep10`) is fine.
+
+`NETWORK_PASSPHRASE_ALLOWLIST` holds Testnet and Public. A challenge whose
+`network_passphrase` is missing, empty, or anything else is refused rather than
+guessed at: signing an unknown network's transaction is how a malicious auth
+server would obtain a signature to replay where the user never agreed. The
+reference server returns the passphrase already (`scripts/sep10-server.mjs`);
+`fetchChallenge` used to discard it.
 
 ## Reference SEP-10 auth server (dev/test only)
 
@@ -195,6 +322,21 @@ drives `wallet_connect.html` in real mobile browser contexts
 - the full return handshake: a pre-signed challenge is appended to the URL
   exactly as a wallet's callback redirect would, and the page is expected
   to show "Wallet Connected" with the matching address.
+
+[`tests/e2e/wallet-connect-csp.spec.js`](../../tests/e2e/wallet-connect-csp.spec.js)
+covers the hardening above by registering a `securitypolicyviolation` listener
+before page scripts run and asserting **zero** violations across page load,
+desktop connect, the chooser, manual entry, the mobile picker, the SEP-10 fetch
+and the deep-link navigation. It also carries a negative control that injects a
+blocked inline `<style>` and a foreign script and asserts violations *are*
+reported — otherwise "zero violations" would pass just as happily with no
+policy at all.
+
+[`tests/e2e/wallet-connect-desktop-multi.spec.js`](../../tests/e2e/wallet-connect-desktop-multi.spec.js)
+covers the desktop extension registry. Note that every account fixture in the
+e2e specs must now be checksum-valid: since #141 the page decodes addresses, so
+a mnemonic placeholder like `GFREIGHTERSHOULDNOTBEUSED…` is rejected as
+malformed and would stop proving whatever it was there to prove.
 
 ```bash
 npm install

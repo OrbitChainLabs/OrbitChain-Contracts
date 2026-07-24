@@ -8,56 +8,84 @@
 # storage, testing, security.  New labels Dependabot creates on first
 # run are listed in `.github/dependabot.yml` and need not be defined here.
 #
+# SCHEMA: v5 replaced v4's bare glob lists with an explicit match-object
+# form — every label maps to a list of `changed-files` matchers, each
+# holding one of `any-glob-to-any-file`, `all-globs-to-all-files`, etc.
+# A bare list of strings (the v4 form) fails with "found unexpected type
+# for label '<name>' (should be array of config options)".
+#
 # Schema reference: https://github.com/actions/labeler#configuration
 
 # Rust Soroban contracts — the canonical on-chain API surface.
 api:
-  - "campaign/**"
-  - "common/**"
-  - "token-bridge/**"
-  - "crates/contracts/core/**"
-  - "crates/contracts/batch-donor/**"
+  - changed-files:
+      - any-glob-to-any-file:
+          - "campaign/**"
+          - "common/**"
+          - "token-bridge/**"
+          - "crates/contracts/core/**"
+          - "crates/contracts/batch-donor/**"
 
 # Native CLI tooling (`cargo run -p orbitchain-tools -- …`).
 cli:
-  - "crates/tools/**"
+  - changed-files:
+      - any-glob-to-any-file:
+          - "crates/tools/**"
 
 # Frontend / mobile-wallet surfaces (Playwright + wallet integration).
 frontend:
-  - "wallet_connect.html"
-  - "wallet_connect.js"
-  - "tests/e2e/**"
-  - "playwright.config.js"
+  - changed-files:
+      - any-glob-to-any-file:
+          - "wallet_connect.html"
+          - "wallet_connect.js"
+          - "wallet_connect.css"
+          - "wallet_connect.test.js"
+          - "tests/e2e/**"
+          - "playwright.config.js"
+          - "package.json"
 
 # CI / build infrastructure.
 ci:
-  - ".github/workflows/**"
-  - ".github/*.md"
-  - ".github/ISSUE_TEMPLATE/**"
-  - ".cargo/**"
-  - "rust-toolchain.toml"
-  - "Cargo.toml"
-  - "Cargo.lock"
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/workflows/**"
+          - ".github/*.yml"
+          - ".github/*.md"
+          - ".github/ISSUE_TEMPLATE/**"
+          - ".cargo/**"
+          - "rust-toolchain.toml"
+          - "Cargo.toml"
+          - "Cargo.lock"
+          - "deny.toml"
 
 # Documentation and reference material.
 documentation:
-  - "docs/**"
-  - "**/*.md"
+  - changed-files:
+      - any-glob-to-any-file:
+          - "docs/**"
+          - "**/*.md"
 
 # Persistent / temporary storage backend code paths.
 storage:
-  - "**/storage*.rs"
-  - "**/backend.rs"
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/storage*.rs"
+          - "**/backend.rs"
 
 # Tests / property-based / fuzz harnesses.
 testing:
-  - "**/tests/**"
-  - "**/*test*.rs"
-  - "**/proptest-strategies/**"
-  - "**/fuzz_targets/**"
-  - "fuzz/**"
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/tests/**"
+          - "**/*test*.rs"
+          - "**/proptest-strategies/**"
+          - "**/fuzz_targets/**"
+          - "fuzz/**"
 
 # Security process and security-sensitive code.
 security:
-  - "SECURITY.md"
-  - "**/security*.rs"
+  - changed-files:
+      - any-glob-to-any-file:
+          - "SECURITY.md"
+          - "**/security*.rs"
+          - "**/asset_auth.rs"

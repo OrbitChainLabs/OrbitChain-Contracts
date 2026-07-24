@@ -26,6 +26,126 @@
  * the single `window.freighter` call the desktop path uses.
  */
 
+// ─── Stellar StrKey validation (issue #141) ─────────────────────────────────
+//
+// A `G…` address is not just "56 chars from the base32 alphabet": it is a
+// 35-byte payload — version byte, 32-byte ed25519 key, CRC16 checksum —
+// encoded as unpadded base32 (SEP-23). The shape-only regex this file used
+// before accepted 32^55 strings that no wallet could ever produce, including
+// every single-character-repeated typo.
+//
+// Implemented inline rather than importing `@stellar/stellar-sdk`: the page is
+// served as plain static files with no bundler (see playwright.config.js), and
+// the issue specifies no new runtime dependencies. `wallet_connect.test.js`
+// cross-validates this decoder against the SDK's `StrKey` — the SDK is already
+// a devDependency, so correctness is proven against the reference
+// implementation without shipping it to the browser.
+
+const STRKEY_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"; // RFC 4648 base32
+const STRKEY_LENGTH = 56; // 35 bytes, unpadded base32
+const STRKEY_DECODED_LENGTH = 35;
+// SEP-23 version bytes. These are what make an encoded key *start with* G / S.
+const STRKEY_VERSION_ED25519_PUBLIC = 6 << 3; // 0x30 -> "G…"
+const STRKEY_VERSION_ED25519_SECRET = 18 << 3; // 0x90 -> "S…"
+
+/**
+ * Strict base32 decode. Returns null for anything outside the RFC 4648
+ * alphabet — lowercase, `0`/`1`/`8`/`9`, `=` padding and unicode lookalikes
+ * all fail here rather than silently decoding to garbage.
+ */
+function base32Decode(value) {
+  const bytes = new Uint8Array(Math.floor((value.length * 5) / 8));
+  let buffer = 0;
+  let bits = 0;
+  let index = 0;
+
+  for (let i = 0; i < value.length; i += 1) {
+    const digit = STRKEY_ALPHABET.indexOf(value[i]);
+    if (digit === -1) return null;
+
+    buffer = (buffer << 5) | digit;
+    bits += 5;
+    if (bits >= 8) {
+      bits -= 8;
+      bytes[index] = (buffer >> bits) & 0xff;
+      index += 1;
+    }
+  }
+
+  // Trailing bits are padding and must be zero; a nonzero remainder means the
+  // string was not produced by a conforming encoder.
+  if (bits > 0 && (buffer & ((1 << bits) - 1)) !== 0) return null;
+
+  return bytes;
+}
+
+/** CRC16-XModem (poly 0x1021, init 0x0000) — the checksum SEP-23 specifies. */
+function crc16XModem(bytes, length) {
+  let crc = 0x0000;
+
+  for (let i = 0; i < length; i += 1) {
+    let code = (crc >>> 8) & 0xff;
+    code ^= bytes[i] & 0xff;
+    code ^= code >>> 4;
+    crc = (crc << 8) & 0xffff;
+    crc ^= code;
+    code = (code << 5) & 0xffff;
+    crc ^= code;
+    code = (code << 7) & 0xffff;
+    crc ^= code;
+  }
+
+  return crc & 0xffff;
+}
+
+/**
+ * Decode a strkey to `{ version, payload }`, or null if it is malformed.
+ * The version byte is returned rather than checked here so callers can
+ * distinguish "not a key" from "a key of the wrong kind" — a valid `S…`
+ * secret decodes successfully and is rejected by isValidPublicKey below.
+ */
+function decodeStrKey(value) {
+  if (typeof value !== "string" || value.length !== STRKEY_LENGTH) return null;
+
+  const decoded = base32Decode(value);
+  if (decoded === null || decoded.length !== STRKEY_DECODED_LENGTH) return null;
+
+  // Checksum is stored little-endian over the version byte + payload.
+  const expected = decoded[33] | (decoded[34] << 8);
+  if (crc16XModem(decoded, 33) !== expected) return null;
+
+  return { version: decoded[0], payload: decoded.subarray(1, 33) };
+}
+
+/**
+ * True only for a checksum-valid ed25519 *public* key. Secret keys (`S…`)
+ * decode fine and are deliberately rejected: a wallet-connect page must never
+ * accept a secret, and treating "well-formed secret" as "not a public key" is
+ * what lets the caller say so precisely.
+ */
+function isValidPublicKey(value) {
+  const decoded = decodeStrKey(value);
+  return decoded !== null && decoded.version === STRKEY_VERSION_ED25519_PUBLIC;
+}
+
+/** True for a checksum-valid ed25519 secret seed. Used only to refuse it. */
+function isSecretKey(value) {
+  const decoded = decodeStrKey(value);
+  return decoded !== null && decoded.version === STRKEY_VERSION_ED25519_SECRET;
+}
+
+/**
+ * The message shown when user-supplied input fails validation. Pasting a
+ * secret key into a wallet-connect field is the one failure mode worth calling
+ * out by name, so it gets its own wording instead of the generic hint.
+ */
+function publicKeyError(value) {
+  if (isSecretKey(value)) {
+    return "That is a secret key. Enter your public key (starts with G) — never paste a secret here.";
+  }
+  return "Enter a valid Stellar public key (starts with G, 56 chars).";
+}
+
 // ─── Mobile deep-link + SEP-10 module ───────────────────────────────────────
 (function (global) {
   'use strict';
@@ -33,16 +153,87 @@
   // ── Config ────────────────────────────────────────────────────────────────
   // Overridable via <script data-auth-server="https://auth.example.com">
   // or window.ORBITCHAIN_AUTH_SERVER before this file loads.
-  function resolveAuthServer() {
+  var DEFAULT_AUTH_SERVER = 'http://localhost:4000';
+
+  // ── Network allowlists (issue #141) ──────────────────────────────────────
+  // Both lists are deliberately redundant with the page's CSP: `connect-src`
+  // is the browser's enforcement, these are ours. Same defence-in-depth idiom
+  // as assert_asset_is_accepted in campaign/src/asset_auth.rs — a guard that
+  // only ever fires when something upstream has already gone wrong is still
+  // worth having when the thing downstream is an authentication handshake.
+  //
+  // Origins the SEP-10 auth server is allowed to live on. Anything else is
+  // refused before a single request is made, so a compromised
+  // window.ORBITCHAIN_AUTH_SERVER (or a `data-auth-server` injected into the
+  // markup) cannot redirect the handshake to an attacker's endpoint.
+  // `.invalid` is the RFC 2606 reserved TLD: it is an unmistakable placeholder
+  // that can never resolve. Replace it with the real production origin —
+  // and the page's connect-src — when the auth server is deployed.
+  var AUTH_ORIGIN_ALLOWLIST = [
+    'http://localhost:4000',
+    'http://127.0.0.1:4000',
+    'https://auth.orbitchain.invalid', // PLACEHOLDER — see docs/tutorials/dapp-integration.md
+  ];
+
+  // Stellar networks whose SEP-10 challenges this page will sign. A challenge
+  // issued for any other network passphrase is rejected: signing an unknown
+  // network's transaction is how a malicious auth server would get a signature
+  // it could replay somewhere the user never agreed to.
+  var NETWORK_PASSPHRASE_ALLOWLIST = [
+    'Test SDF Network ; September 2015', // Testnet
+    'Public Global Stellar Network ; September 2015', // Public
+  ];
+
+  function isAllowedAuthOrigin(candidate) {
+    if (typeof candidate !== 'string' || !candidate) return false;
+    var origin;
+    try {
+      origin = new URL(candidate).origin;
+    } catch (e) {
+      return false; // relative or malformed URLs never reach the network
+    }
+    return AUTH_ORIGIN_ALLOWLIST.indexOf(origin) !== -1;
+  }
+
+  /**
+   * Pure core of resolveAuthServer: given whatever the page configured,
+   * decide what to actually use. A non-allowlisted origin degrades to the
+   * default (so the page keeps working) and returns a message the UI surfaces
+   * — it is never fetched.
+   */
+  function pickAuthServer(configured) {
+    if (!configured) return { server: DEFAULT_AUTH_SERVER, rejection: null };
+    if (isAllowedAuthOrigin(configured)) {
+      return { server: configured, rejection: null };
+    }
+    return {
+      server: DEFAULT_AUTH_SERVER,
+      rejection:
+        'Auth server ' + String(configured) +
+        ' is not on the allowed origin list; using the default instead.',
+    };
+  }
+
+  function readConfiguredAuthServer() {
     if (global.ORBITCHAIN_AUTH_SERVER) return global.ORBITCHAIN_AUTH_SERVER;
     var thisScript = typeof document !== 'undefined' ? document.currentScript : null;
     if (thisScript && thisScript.dataset && thisScript.dataset.authServer) {
       return thisScript.dataset.authServer;
     }
-    return 'http://localhost:4000';
+    return null;
   }
 
-  var AUTH_SERVER = resolveAuthServer();
+  function resolveAuthServer() {
+    return pickAuthServer(readConfiguredAuthServer());
+  }
+
+  var resolved = resolveAuthServer();
+  var AUTH_SERVER = resolved.server;
+  var AUTH_SERVER_REJECTION = resolved.rejection;
+  if (AUTH_SERVER_REJECTION && global.console && global.console.error) {
+    global.console.error('[OrbitChain] ' + AUTH_SERVER_REJECTION);
+  }
+
   var HOME_DOMAIN = global.location ? global.location.hostname || 'localhost' : 'localhost';
   var RETURN_PARAM = 'orbitchain_xdr';
 
@@ -208,6 +399,25 @@
   }
 
   // ── SEP-10 client ────────────────────────────────────────────────────────
+  /**
+   * Gate a challenge response on the network allowlist before it is ever
+   * handed to a wallet for signing (issue #141). A missing passphrase is
+   * rejected too: SEP-10 servers are expected to return one, and "unknown
+   * network" is not a state worth guessing about when the output is a
+   * signature.
+   */
+  function validateChallenge(challenge) {
+    if (!challenge || typeof challenge.transaction !== 'string' || !challenge.transaction) {
+      throw new Error('SEP-10 challenge response contained no transaction.');
+    }
+    if (NETWORK_PASSPHRASE_ALLOWLIST.indexOf(challenge.network_passphrase) === -1) {
+      throw new Error(
+        'SEP-10 challenge is for an unrecognised Stellar network; refusing to sign it.',
+      );
+    }
+    return challenge;
+  }
+
   var Sep10 = {
     /**
      * GET {AUTH_SERVER}/auth?account=...&home_domain=...
@@ -219,7 +429,7 @@
       return fetch(url).then(function (res) {
         if (!res.ok) throw new Error('SEP-10 challenge request failed: HTTP ' + res.status);
         return res.json();
-      });
+      }).then(validateChallenge);
     },
 
     /**
@@ -251,8 +461,11 @@
    * the signed challenge and complete the handshake.
    */
   function startMobileConnect(wallet, account) {
-    if (!account || account.charAt(0) !== 'G' || account.length !== 56) {
-      return Promise.reject(new Error('Enter a valid Stellar public key (starts with G, 56 chars).'));
+    // Same StrKey checksum validation the desktop paths use (issue #141) —
+    // this call site previously only checked the first character and the
+    // length, which is weaker than even the old regex.
+    if (!isValidPublicKey(account)) {
+      return Promise.reject(new Error(publicKeyError(account)));
     }
 
     return Sep10.fetchChallenge(account).then(function (challenge) {
@@ -306,7 +519,19 @@
     Sep10: Sep10,
     startMobileConnect: startMobileConnect,
     handleMobileReturn: handleMobileReturn,
-    _internal: { sep7TxUri: sep7TxUri, stripReturnParam: stripReturnParam, AUTH_SERVER: AUTH_SERVER },
+    // Non-null when the page configured an auth server that failed the origin
+    // allowlist. The UI surfaces it through the existing #status live region.
+    authServerRejection: function () { return AUTH_SERVER_REJECTION; },
+    _internal: {
+      sep7TxUri: sep7TxUri,
+      stripReturnParam: stripReturnParam,
+      AUTH_SERVER: AUTH_SERVER,
+      AUTH_ORIGIN_ALLOWLIST: AUTH_ORIGIN_ALLOWLIST,
+      NETWORK_PASSPHRASE_ALLOWLIST: NETWORK_PASSPHRASE_ALLOWLIST,
+      isAllowedAuthOrigin: isAllowedAuthOrigin,
+      pickAuthServer: pickAuthServer,
+      validateChallenge: validateChallenge,
+    },
   };
 })(typeof window !== 'undefined' ? window : globalThis);
 
@@ -314,10 +539,6 @@
 
 const WALLET_SESSION_KEY = "orbitchain.walletSession";
 const VALID_SOURCES = new Set(["freighter", "manual", "mobile"]);
-
-function isValidPublicKey(value) {
-  return typeof value === "string" && /^G[A-Z2-7]{55}$/.test(value);
-}
 
 function discardStoredSession(storage) {
   try {
@@ -573,6 +794,13 @@ function createWalletSession({
         });
       },
     });
+
+    // Surface a rejected auth-server override (issue #141) through the same
+    // live region every other error uses. openWalletPicker() clears the status
+    // as it opens, so this has to come after it.
+    const rejection = mobile.rejection ? mobile.rejection() : null;
+    if (rejection) ui.setStatus(`Error: ${rejection}`);
+
     return null;
   }
 
@@ -681,7 +909,7 @@ function createWalletSession({
       ui.openManualForm({
         submit(address) {
           if (!isValidPublicKey(address)) {
-            return "Enter a valid Stellar public key (starts with G, 56 chars).";
+            return publicKeyError(address);
           }
           void completeConnection(address, "manual");
           return null;
@@ -1028,6 +1256,7 @@ async function initializeWalletPage(browserWindow) {
           start: (wallet, account) =>
             mobileApi.startMobileConnect(wallet, account),
           handleReturn: () => mobileApi.handleMobileReturn(),
+          rejection: () => mobileApi.authServerRejection(),
         }
       : null,
     desktop: mobileApi
@@ -1051,6 +1280,8 @@ const walletSessionApi = {
   createWalletSession,
   initializeWalletPage,
   isValidPublicKey,
+  isSecretKey,
+  publicKeyError,
   readSession,
 };
 
