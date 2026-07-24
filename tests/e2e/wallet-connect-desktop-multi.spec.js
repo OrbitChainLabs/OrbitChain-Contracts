@@ -17,6 +17,12 @@ import { test, expect } from '@playwright/test';
 
 const FREIGHTER_ACCOUNT = 'GAMX62ZD4FWIKMWGVPEDR6WNL2TYTPQMO2ZJEAZUAON7VCZ5G2GWDF7W';
 const RABET_ACCOUNT = 'GATOACHAPPG72R2KKG5K47ORQVZKGBQ4UYVWLIYITEKMNFXQLNPJFJI3';
+// Deliberately wrong account for the chooser spec: the assertion is that
+// Freighter's key is NOT what ends up connected. Since issue #141 the page
+// validates the StrKey checksum, so this has to be a *real* key that is simply
+// a different one — the old 'GFREIGHTERSHOULDNOTBEUSED…' placeholder would now
+// be rejected as malformed and stop proving anything.
+const FREIGHTER_UNUSED_ACCOUNT = 'GAZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTHCM6';
 
 function isDesktopProject(testInfo) {
   return testInfo.project.name === 'desktop-chromium';
@@ -45,14 +51,14 @@ test.describe('desktop multi-wallet registry', () => {
   });
 
   test('several detected wallets show the inline chooser, never the mobile overlay', async ({ page }) => {
-    await page.addInitScript((addr) => {
+    await page.addInitScript(([rabetAddr, freighterAddr]) => {
       window.freighter = {
         isConnected: async () => true,
         connect: async () => {},
-        getAddress: async () => ({ address: 'GFREIGHTERSHOULDNOTBEUSEDINTHISSPECAAAAAAAAAAAAAAAAAAAAA' }),
+        getAddress: async () => ({ address: freighterAddr }),
       };
-      window.rabet = { connect: async () => ({ publicKey: addr }) };
-    }, RABET_ACCOUNT);
+      window.rabet = { connect: async () => ({ publicKey: rabetAddr }) };
+    }, [RABET_ACCOUNT, FREIGHTER_UNUSED_ACCOUNT]);
     await page.goto('/wallet_connect.html');
     await page.click('#connect-btn');
 
