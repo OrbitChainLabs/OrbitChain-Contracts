@@ -139,7 +139,7 @@ mod tests {
     fn panics_when_not_initialised() {
         let env = make_env();
         with_contract(&env, || {
-            get_all_milestones_view(&env);
+            let _ = get_all_milestones_view(&env);
         });
     }
 }

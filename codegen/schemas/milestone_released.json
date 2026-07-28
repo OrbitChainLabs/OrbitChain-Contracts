@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.orbitchain.org/events/milestone_released.json",
+  "title": "OrbitChain Event: milestone_released",
+  "description": "Event emitted by the OrbitChain campaign contract. Topic: `milestone_released`",
+  "type": "object",
+  "required": [
+    "milestone_index",
+    "amount",
+    "asset_code",
+    "recipient",
+    "timestamp"
+  ],
+  "properties": {
+    "amount": {
+      "type": "string",
+      "description": "128-bit signed integer, encoded as a decimal string",
+      "format": "int128"
+    },
+    "asset_code": {
+      "type": "string",
+      "description": "UTF-8 string"
+    },
+    "milestone_index": {
+      "type": "integer",
+      "description": "32-bit unsigned integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "recipient": {
+      "type": "string",
+      "description": "Stellar address (G...)"
+    },
+    "timestamp": {
+      "type": "integer",
+      "description": "64-bit unsigned integer (UNIX timestamp or counter)",
+      "format": "uint64",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": false
+}

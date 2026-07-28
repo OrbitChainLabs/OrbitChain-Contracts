@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.orbitchain.org/events/contract_frozen.json",
+  "title": "OrbitChain Event: contract_frozen",
+  "description": "Emitted when the contract is frozen by the admin, blocking all mutating operations. Topics: [\"campaign\", \"contract_frozen\"]",
+  "type": "object",
+  "required": [
+    "admin",
+    "timestamp"
+  ],
+  "properties": {
+    "admin": {
+      "type": "string",
+      "description": "Admin (creator) address (G...)"
+    },
+    "timestamp": {
+      "type": "integer",
+      "description": "Ledger timestamp of the freeze (UNIX seconds)",
+      "format": "uint64",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": false
+}

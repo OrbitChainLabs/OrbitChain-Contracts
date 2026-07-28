@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.orbitchain.org/events/deadline_extended.json",
+  "title": "OrbitChain Event: deadline_extended",
+  "description": "Emitted when the campaign creator extends the campaign deadline. Topics: [\"campaign\", \"deadline_extended\"]",
+  "type": "object",
+  "required": [
+    "creator",
+    "old_deadline",
+    "new_deadline"
+  ],
+  "properties": {
+    "creator": {
+      "type": "string",
+      "description": "Campaign creator's Stellar address (G...)"
+    },
+    "old_deadline": {
+      "type": "integer",
+      "description": "Previous deadline UNIX timestamp",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "new_deadline": {
+      "type": "integer",
+      "description": "New deadline UNIX timestamp",
+      "format": "uint64",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,10 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.orbitchain.org/events/campaign_ended.json",
+  "title": "OrbitChain Event: campaign_ended",
+  "description": "Emitted when the campaign transitions to the Ended state (deadline passed or concluded normally). Topics: [\"campaign\", \"campaign_ended\"]",
+  "type": "object",
+  "required": [],
+  "properties": {},
+  "additionalProperties": false
+}

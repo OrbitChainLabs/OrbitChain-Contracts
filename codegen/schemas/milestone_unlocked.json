@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.orbitchain.org/events/milestone_unlocked.json",
+  "title": "OrbitChain Event: milestone_unlocked",
+  "description": "Emitted once per milestone when its target is first reached. Not re-emitted if the milestone is already unlocked. Topics: [\"milestone_unlocked\", contract_address]",
+  "type": "object",
+  "required": [
+    "milestone_index",
+    "target_amount",
+    "raised_total"
+  ],
+  "properties": {
+    "milestone_index": {
+      "type": "integer",
+      "description": "Zero-based milestone index",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "target_amount": {
+      "type": "string",
+      "description": "Funding threshold that triggered the unlock, encoded as a decimal string",
+      "format": "int128"
+    },
+    "raised_total": {
+      "type": "string",
+      "description": "Cumulative raised amount at time of unlock, encoded as a decimal string",
+      "format": "int128"
+    }
+  },
+  "additionalProperties": false
+}

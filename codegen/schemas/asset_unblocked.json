@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.orbitchain.org/events/asset_unblocked.json",
+  "title": "OrbitChain Event: asset_unblocked",
+  "description": "Emitted when an asset is unblocked by the admin (Issue #90). Topics: [\"campaign\", \"asset_unblocked\"]",
+  "type": "object",
+  "required": [
+    "admin",
+    "asset",
+    "timestamp"
+  ],
+  "properties": {
+    "admin": {
+      "type": "string",
+      "description": "Admin (creator) address (G...)"
+    },
+    "asset": {
+      "type": "string",
+      "description": "Contract address of the unblocked asset (G...)"
+    },
+    "timestamp": {
+      "type": "integer",
+      "description": "Ledger timestamp of the unblock action (UNIX seconds)",
+      "format": "uint64",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": false
+}

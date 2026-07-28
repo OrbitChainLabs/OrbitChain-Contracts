@@ -1,0 +1,8 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.orbitchain.org/events/campaign_goal_reached.json",
+  "title": "OrbitChain Event: campaign_goal_reached",
+  "description": "Emitted when the campaign's raised amount reaches or exceeds the goal. Topics: [\"campaign\", \"campaign_goal_reached\"]",
+  "type": "string",
+  "format": "int128"
+}

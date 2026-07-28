@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.orbitchain.org/events/campaign_cancelled.json",
+  "title": "OrbitChain Event: campaign_cancelled",
+  "description": "Emitted when the campaign creator cancels the campaign. Topics: [\"campaign\", \"campaign_cancelled\"]",
+  "type": "object",
+  "required": [
+    "creator"
+  ],
+  "properties": {
+    "creator": {
+      "type": "string",
+      "description": "Campaign creator's Stellar address (G...)"
+    }
+  },
+  "additionalProperties": false
+}

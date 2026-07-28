@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.orbitchain.org/events/refund_claimed.json",
+  "title": "OrbitChain Event: refund_claimed",
+  "description": "Emitted when a donor successfully claims a refund. Topics: [\"campaign\", \"refund_claimed\"]",
+  "type": "object",
+  "required": [
+    "donor",
+    "total_donated"
+  ],
+  "properties": {
+    "donor": {
+      "type": "string",
+      "description": "Donor's Stellar address (G...)"
+    },
+    "total_donated": {
+      "type": "string",
+      "description": "Total amount donated by this donor, encoded as a decimal string",
+      "format": "int128"
+    }
+  },
+  "additionalProperties": false
+}

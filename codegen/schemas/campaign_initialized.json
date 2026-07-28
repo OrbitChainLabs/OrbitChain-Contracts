@@ -1,0 +1,51 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.orbitchain.org/events/campaign_initialized.json",
+  "title": "OrbitChain Event: campaign_initialized",
+  "description": "Event emitted by the OrbitChain campaign contract. Topic: `campaign_initialized`",
+  "type": "object",
+  "required": [
+    "creator",
+    "goal_amount",
+    "end_time",
+    "asset_count",
+    "milestone_count",
+    "created_at_ledger"
+  ],
+  "properties": {
+    "asset_count": {
+      "type": "integer",
+      "description": "32-bit unsigned integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "created_at_ledger": {
+      "type": "integer",
+      "description": "32-bit unsigned integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "creator": {
+      "type": "string",
+      "description": "Stellar address (G...)"
+    },
+    "end_time": {
+      "type": "integer",
+      "description": "64-bit unsigned integer (UNIX timestamp or counter)",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "goal_amount": {
+      "type": "string",
+      "description": "128-bit signed integer, encoded as a decimal string",
+      "format": "int128"
+    },
+    "milestone_count": {
+      "type": "integer",
+      "description": "32-bit unsigned integer",
+      "format": "uint32",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": false
+}

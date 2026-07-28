@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.orbitchain.org/events/contract_upgraded.json",
+  "title": "OrbitChain Event: contract_upgraded",
+  "description": "Emitted when the contract WASM hash is upgraded by the admin. Topics: [\"campaign\", \"contract_upgraded\"]",
+  "type": "object",
+  "required": [
+    "admin",
+    "new_wasm_hash",
+    "timestamp"
+  ],
+  "properties": {
+    "admin": {
+      "type": "string",
+      "description": "Admin (creator) address (G...)"
+    },
+    "new_wasm_hash": {
+      "type": "string",
+      "description": "New WASM hash being deployed, hex-encoded",
+      "format": "hex32"
+    },
+    "timestamp": {
+      "type": "integer",
+      "description": "Ledger timestamp of the upgrade (UNIX seconds)",
+      "format": "uint64",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": false
+}

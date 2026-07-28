@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.orbitchain.org/events/campaign_status_changed.json",
+  "title": "OrbitChain Event: campaign_status_changed",
+  "description": "Event emitted by the OrbitChain campaign contract. Topic: `campaign_status_changed`",
+  "type": "object",
+  "required": [
+    "from",
+    "to",
+    "ledger"
+  ],
+  "properties": {
+    "from": {
+      "type": "string",
+      "description": "Campaign lifecycle status",
+      "enum": [
+        "Active",
+        "GoalReached",
+        "Ended",
+        "Cancelled"
+      ]
+    },
+    "ledger": {
+      "type": "integer",
+      "description": "32-bit unsigned integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "to": {
+      "type": "string",
+      "description": "Campaign lifecycle status",
+      "enum": [
+        "Active",
+        "GoalReached",
+        "Ended",
+        "Cancelled"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

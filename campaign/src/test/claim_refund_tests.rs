@@ -5,11 +5,9 @@
 
 #![cfg(test)]
 
-use core::ops::Add;
-
 use soroban_sdk::testutils::{Address as AddressTestUtils, Ledger};
 use soroban_sdk::token::{StellarAssetClient, TokenClient};
-use soroban_sdk::{log, vec, Address, Env, Vec};
+use soroban_sdk::{vec, Address, Env, Vec};
 
 use super::with_contract;
 use crate::storage::{set_campaign, set_donor, set_milestone};
@@ -464,7 +462,7 @@ fn create_test_milestone_data(
     vec![&env, milestone]
 }
 
-fn token_asset<'a>(env: &Env) -> (StellarAssetClient<'a>, Address, TokenClient) {
+fn token_asset<'a>(env: &Env) -> (StellarAssetClient<'a>, Address, TokenClient<'_>) {
     let admin = Address::generate(&env);
     let sac = env.register_stellar_asset_contract_v2(admin.clone());
     let token_address = sac.address();

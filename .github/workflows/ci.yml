@@ -97,6 +97,8 @@ jobs:
         with:
           cache-on-failure: true
       - name: cargo test (contracts)
+        env:
+          RUSTFLAGS: "-D warnings"
         run: cargo test ${{ env.CONTRACTS }}
 
   wasm-check:
@@ -156,6 +158,27 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 14
+
+  # ── Event schema staleness check — issue #130 ─────────────────────────────
+  # Ensures JSON schemas under codegen/schemas/ stay synchronised with the
+  # contract event struct definitions.  Run `cargo run -p orbitchain-codegen`
+  # locally to regenerate when you change event fields.
+  schema-check:
+    name: Event schema staleness check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          cache: false
+      - name: Cache cargo registry and target
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - name: Check event schemas are up-to-date
+        run: cargo run -p orbitchain-codegen -- --src campaign/src/types.rs --out codegen/schemas/ --check
 
   # ── crates/tools (native CLI) — issue #122 ─────────────────────────────────
   # The CLI is a major part of the user-facing surface and was previously
@@ -230,4 +253,6 @@ jobs:
           cache-on-failure: true
       # Acceptance criterion (#122): a PR that fails this blocks merge.
       - name: cargo test (tools)
+        env:
+          RUSTFLAGS: "-D warnings"
         run: cargo test ${{ env.TOOLS }}

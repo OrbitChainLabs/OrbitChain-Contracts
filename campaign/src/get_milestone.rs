@@ -145,7 +145,7 @@ mod tests {
         with_contract(&env, || {
             seed_campaign(&env, 1);
             seed_milestone(&env, 0, MilestoneStatus::Locked);
-            get_milestone_view(&env, 1);
+            let _ = get_milestone_view(&env, 1);
         });
     }
 
@@ -156,7 +156,7 @@ mod tests {
         with_contract(&env, || {
             seed_campaign(&env, 1);
             seed_milestone(&env, 0, MilestoneStatus::Locked);
-            get_milestone_view(&env, 99);
+            let _ = get_milestone_view(&env, 99);
         });
     }
 
@@ -165,7 +165,7 @@ mod tests {
     fn panics_when_contract_not_initialised() {
         let env = make_env();
         with_contract(&env, || {
-            get_milestone_view(&env, 0);
+            let _ = get_milestone_view(&env, 0);
         });
     }
 
