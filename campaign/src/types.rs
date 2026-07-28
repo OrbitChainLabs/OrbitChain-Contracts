@@ -324,6 +324,12 @@ pub enum DataKey {
     /// clients read one entry instead of recomputing from campaign +
     /// milestones + counters on every call.
     CachedReport,
+
+    // ── Persistent (appended — issue #57) ───────────────────────────────────
+    /// Operator authorization flag, keyed by operator address. Present and
+    /// `true` means the address may call operator-only entrypoints (e.g.
+    /// `bump_storage`). Granted by the creator via `add_operator`.
+    Operators(Address),
 }
 
 // ─── Asset types ──────────────────────────────────────────────────────────────

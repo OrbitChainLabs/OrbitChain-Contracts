@@ -725,6 +725,58 @@ impl CampaignContract {
         event::contract_unfrozen(&env, &campaign.creator, timestamp);
     }
 
+    /// Issue #57 – Grant operator status to `operator`, permitting it to call
+    /// operator-only entrypoints (currently `bump_storage_as_operator`).
+    ///
+    /// Only the creator can grant operator status.
+    ///
+    /// # Panics
+    /// - `Error::Unauthorized` if not called by the creator
+    /// - `Error::NotInitialized` if campaign not yet initialized
+    pub fn add_operator(env: Env, operator: Address) {
+        let campaign =
+            get_campaign(&env).unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
+
+        campaign.creator.require_auth();
+
+        storage::add_operator(&env, &operator);
+
+        let timestamp = env.ledger().timestamp();
+        event::operator_added(&env, &campaign.creator, &operator, timestamp);
+    }
+
+    /// Issue #57 – Refresh the TTL of every core persistent storage key plus
+    /// every milestone record, preventing archival during long-running
+    /// campaigns (see `storage::bump_all_persistent`, issue #33).
+    ///
+    /// Named distinctly from the pre-existing `bump_storage` (issue #120,
+    /// deliberately public/no-auth) to avoid colliding with it. The two
+    /// entrypoints currently coexist: `bump_storage` lets anyone extend TTL,
+    /// which is exactly the "any caller can bump TTL" gas/DoS vector this
+    /// ticket's security note warns about. This entrypoint is the
+    /// operator-gated alternative; see the PR description for the tradeoff
+    /// and a suggestion to reconcile the two.
+    ///
+    /// # Panics
+    /// - `Error::Unauthorized` if `operator` has not been granted operator
+    ///   status via `add_operator`
+    /// - `Error::NotInitialized` if campaign not yet initialized
+    pub fn bump_storage_as_operator(env: Env, operator: Address) {
+        operator.require_auth();
+
+        let campaign =
+            get_campaign(&env).unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
+
+        if !storage::is_operator(&env, &operator) {
+            panic_with_error(&env, Error::Unauthorized);
+        }
+
+        storage::bump_all_persistent(&env, campaign.milestone_count);
+
+        let timestamp = env.ledger().timestamp();
+        event::storage_bumped(&env, &operator, timestamp);
+    }
+
     /// Issue #175 – assert the current invoker is the campaign creator.
     ///
     /// Reads the creator address from campaign storage and calls `require_auth()`.
