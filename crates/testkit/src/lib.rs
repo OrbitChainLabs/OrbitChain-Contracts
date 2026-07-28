@@ -119,3 +119,11 @@ pub fn xlm_assets(env: &Env) -> (Vec<StellarAsset>, Address) {
     let assets = make_assets(env, &[("XLM", Some(issuer.clone()))]);
     (assets, issuer)
 }
+
+/// Register a real SEP-41 token contract and return its address.
+/// Must be called OUTSIDE `with_contract` / `env.as_contract()` because
+/// `register_stellar_asset_contract_v2` internally requires auth on the admin.
+pub fn register_test_token(env: &Env) -> Address {
+    let admin = Address::generate(env);
+    env.register_stellar_asset_contract_v2(admin).address()
+}

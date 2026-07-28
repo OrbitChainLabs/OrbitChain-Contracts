@@ -13,7 +13,8 @@ use orbitchain_campaign::types::*;
 use orbitchain_campaign::CampaignContract;
 
 use orbitchain_testkit::{
-    compute_milestone_targets, make_milestones, with_contract, xlm_assets, BASE,
+    compute_milestone_targets, make_milestones, register_test_token, with_contract, xlm_assets,
+    BASE,
 };
 
 // ─── Strategies ────────────────────────────────────────────────────────────────
@@ -40,8 +41,12 @@ fn arb_donations() -> impl Strategy<Value = std::vec::Vec<i128>> {
 
 // ─── Helper: initialize a campaign ─────────────────────────────────────────────
 
-fn setup_campaign(env: &Env, goal: i128, milestone_count: usize) {
-    let (assets, _issuer) = xlm_assets(env);
+fn setup_campaign(env: &Env, goal: i128, milestone_count: usize, token_addr: &Address) {
+    let mut assets = soroban_sdk::Vec::new(env);
+    assets.push_back(StellarAsset {
+        asset_code: soroban_sdk::String::from_str(env, "XLM"),
+        issuer: Some(token_addr.clone()),
+    });
     let creator = Address::generate(env);
     let end_time = BASE + 86_400;
     let targets = compute_milestone_targets(goal, milestone_count);
@@ -61,8 +66,13 @@ proptest! {
     ) {
         let env = Env::default();
         env.mock_all_auths();
+        let token_addr = register_test_token(&env);
         with_contract(&env, || {
-            let (assets, _issuer) = xlm_assets(&env);
+            let mut assets = soroban_sdk::Vec::new(&env);
+            assets.push_back(StellarAsset {
+                asset_code: soroban_sdk::String::from_str(&env, "XLM"),
+                issuer: Some(token_addr.clone()),
+            });
             let creator = Address::generate(&env);
             let end_time = BASE + offset;
             let targets = compute_milestone_targets(goal, milestone_count);
@@ -107,8 +117,9 @@ proptest! {
         let goal = (goal_base * goal_multiplier).max(100);
         let env = Env::default();
         env.mock_all_auths();
+        let token_addr = register_test_token(&env);
         with_contract(&env, || {
-            setup_campaign(&env, goal, 1);
+            setup_campaign(&env, goal, 1, &token_addr);
 
             let mut expected: i128 = 0;
             for amount in &amounts {
@@ -134,8 +145,9 @@ proptest! {
         let goal = (sum * 3).max(100);
         let env = Env::default();
         env.mock_all_auths();
+        let token_addr = register_test_token(&env);
         with_contract(&env, || {
-            setup_campaign(&env, goal, milestone_count);
+            setup_campaign(&env, goal, milestone_count, &token_addr);
 
             let mut cumulative: i128 = 0;
             for amount in &amounts {
@@ -172,8 +184,9 @@ proptest! {
         let goal = total;
         let env = Env::default();
         env.mock_all_auths();
+        let token_addr = register_test_token(&env);
         with_contract(&env, || {
-            setup_campaign(&env, goal, 1);
+            setup_campaign(&env, goal, 1, &token_addr);
 
             for amount in &amounts {
                 let donor = Address::generate(&env);
@@ -196,8 +209,9 @@ proptest! {
         let goal: i128 = amounts.iter().sum::<i128>().max(100) * 10;
         let env = Env::default();
         env.mock_all_auths();
+        let token_addr = register_test_token(&env);
         with_contract(&env, || {
-            setup_campaign(&env, goal, 1);
+            setup_campaign(&env, goal, 1, &token_addr);
 
             for amount in &amounts {
                 let donor = Address::generate(&env);
@@ -221,8 +235,9 @@ proptest! {
         let goal: i128 = amounts.iter().sum::<i128>().max(100) * 10;
         let env = Env::default();
         env.mock_all_auths();
+        let token_addr = register_test_token(&env);
         with_contract(&env, || {
-            setup_campaign(&env, goal, 1);
+            setup_campaign(&env, goal, 1, &token_addr);
 
             for amount in &amounts {
                 let donor = Address::generate(&env);
@@ -245,8 +260,9 @@ proptest! {
         let goal: i128 = amounts.iter().sum::<i128>().max(100) * 10;
         let env = Env::default();
         env.mock_all_auths();
+        let token_addr = register_test_token(&env);
         with_contract(&env, || {
-            setup_campaign(&env, goal, 1);
+            setup_campaign(&env, goal, 1, &token_addr);
 
             for amount in &amounts {
                 let donor = Address::generate(&env);
@@ -269,8 +285,9 @@ proptest! {
         let goal: i128 = amounts.iter().sum::<i128>().max(100) * 10;
         let env = Env::default();
         env.mock_all_auths();
+        let token_addr = register_test_token(&env);
         with_contract(&env, || {
-            setup_campaign(&env, goal, 1);
+            setup_campaign(&env, goal, 1, &token_addr);
 
             for amount in &amounts {
                 let donor = Address::generate(&env);
@@ -293,8 +310,9 @@ proptest! {
         let goal: i128 = amounts.iter().sum::<i128>().max(100) * 10;
         let env = Env::default();
         env.mock_all_auths();
+        let token_addr = register_test_token(&env);
         with_contract(&env, || {
-            setup_campaign(&env, goal, 1);
+            setup_campaign(&env, goal, 1, &token_addr);
 
             for amount in &amounts {
                 let donor = Address::generate(&env);
@@ -320,8 +338,13 @@ proptest! {
         let goal = total.max(100) * 2;
         let env = Env::default();
         env.mock_all_auths();
+        let token_addr = register_test_token(&env);
         with_contract(&env, || {
-            let (assets, _issuer) = xlm_assets(&env);
+            let mut assets = soroban_sdk::Vec::new(&env);
+            assets.push_back(StellarAsset {
+                asset_code: soroban_sdk::String::from_str(&env, "XLM"),
+                issuer: Some(token_addr.clone()),
+            });
             let creator = Address::generate(&env);
             let end_time = BASE + 86_400;
             let targets = compute_milestone_targets(goal, 1);
@@ -371,8 +394,9 @@ proptest! {
         let goal: i128 = amounts.iter().sum::<i128>().max(100) * 10;
         let env = Env::default();
         env.mock_all_auths();
+        let token_addr = register_test_token(&env);
         with_contract(&env, || {
-            setup_campaign(&env, goal, 1);
+            setup_campaign(&env, goal, 1, &token_addr);
 
             for amount in &amounts {
                 let donor = Address::generate(&env);
@@ -399,8 +423,9 @@ proptest! {
         let goal: i128 = amounts.iter().sum::<i128>().max(100) * 10;
         let env = Env::default();
         env.mock_all_auths();
+        let token_addr = register_test_token(&env);
         with_contract(&env, || {
-            setup_campaign(&env, goal, 1);
+            setup_campaign(&env, goal, 1, &token_addr);
 
             for amount in &amounts {
                 let donor = Address::generate(&env);
@@ -428,8 +453,9 @@ proptest! {
         let goal: i128 = amounts.iter().sum::<i128>().max(100) * 10;
         let env = Env::default();
         env.mock_all_auths();
+        let token_addr = register_test_token(&env);
         with_contract(&env, || {
-            setup_campaign(&env, goal, 1);
+            setup_campaign(&env, goal, 1, &token_addr);
 
             let mut donors: std::vec::Vec<Address> = std::vec::Vec::new();
             for amount in &amounts {
@@ -497,8 +523,13 @@ proptest! {
         let goal = total.max(100) * 2;
         let env = Env::default();
         env.mock_all_auths();
+        let token_addr = register_test_token(&env);
         with_contract(&env, || {
-            let (assets, _issuer) = xlm_assets(&env);
+            let mut assets = soroban_sdk::Vec::new(&env);
+            assets.push_back(StellarAsset {
+                asset_code: soroban_sdk::String::from_str(&env, "XLM"),
+                issuer: Some(token_addr.clone()),
+            });
             let creator = Address::generate(&env);
             let end_time = BASE + 86_400;
             let targets = compute_milestone_targets(goal, 1);
@@ -553,8 +584,9 @@ proptest! {
         let goal = total.max(100) * 2;
         let env = Env::default();
         env.mock_all_auths();
+        let token_addr = register_test_token(&env);
         with_contract(&env, || {
-            setup_campaign(&env, goal, 1);
+            setup_campaign(&env, goal, 1, &token_addr);
 
             for amount in &amounts {
                 let donor = Address::generate(&env);
@@ -588,9 +620,10 @@ proptest! {
     ) {
         let env = Env::default();
         env.mock_all_auths();
+        let token_addr = register_test_token(&env);
         with_contract(&env, || {
             let targets = compute_milestone_targets(goal, milestone_count);
-            setup_campaign(&env, goal, milestone_count);
+            setup_campaign(&env, goal, milestone_count, &token_addr);
 
             for i in 0..milestone_count as u32 {
                 let ms = CampaignContract::get_milestone_view(env.clone(), i);
@@ -612,8 +645,9 @@ proptest! {
     ) {
         let env = Env::default();
         env.mock_all_auths();
+        let token_addr = register_test_token(&env);
         with_contract(&env, || {
-            setup_campaign(&env, goal, milestone_count);
+            setup_campaign(&env, goal, milestone_count, &token_addr);
 
             let all = CampaignContract::get_all_milestones(env.clone());
             assert_eq!(all.len() as usize, milestone_count);
@@ -631,8 +665,9 @@ proptest! {
         let goal: i128 = amounts.iter().sum::<i128>().max(100) * 10;
         let env = Env::default();
         env.mock_all_auths();
+        let token_addr = register_test_token(&env);
         with_contract(&env, || {
-            setup_campaign(&env, goal, 1);
+            setup_campaign(&env, goal, 1, &token_addr);
 
             for amount in &amounts {
                 let donor = Address::generate(&env);
@@ -658,8 +693,9 @@ proptest! {
         let goal: i128 = amounts.iter().sum::<i128>().max(100) * 10;
         let env = Env::default();
         env.mock_all_auths();
+        let token_addr = register_test_token(&env);
         with_contract(&env, || {
-            setup_campaign(&env, goal, 1);
+            setup_campaign(&env, goal, 1, &token_addr);
 
             for amount in &amounts {
                 let donor = Address::generate(&env);
@@ -685,8 +721,13 @@ proptest! {
     ) {
         let env = Env::default();
         env.mock_all_auths();
+        let token_addr = register_test_token(&env);
         with_contract(&env, || {
-            let (assets, _issuer) = xlm_assets(&env);
+            let mut assets = soroban_sdk::Vec::new(&env);
+            assets.push_back(StellarAsset {
+                asset_code: soroban_sdk::String::from_str(&env, "XLM"),
+                issuer: Some(token_addr.clone()),
+            });
             let creator = Address::generate(&env);
             let end_time = BASE + initial_offset;
             let targets = vec![10_000i128];
@@ -723,8 +764,13 @@ proptest! {
         let goal = total.max(100) * 2;
         let env = Env::default();
         env.mock_all_auths();
+        let token_addr = register_test_token(&env);
         with_contract(&env, || {
-            let (assets, _issuer) = xlm_assets(&env);
+            let mut assets = soroban_sdk::Vec::new(&env);
+            assets.push_back(StellarAsset {
+                asset_code: soroban_sdk::String::from_str(&env, "XLM"),
+                issuer: Some(token_addr.clone()),
+            });
             let creator = Address::generate(&env);
             let end_time = BASE + 86_400;
             let targets = compute_milestone_targets(goal, 1);
@@ -773,6 +819,7 @@ proptest! {
     fn prop_get_donor_record_non_donor(_seed in 0u64..100) {
         let env = Env::default();
         env.mock_all_auths();
+        let token_addr = register_test_token(&env);
         with_contract(&env, || {
             let non_donor = Address::generate(&env);
             assert!(
@@ -792,8 +839,9 @@ proptest! {
     ) {
         let env = Env::default();
         env.mock_all_auths();
+        let token_addr = register_test_token(&env);
         with_contract(&env, || {
-            setup_campaign(&env, goal, milestone_count);
+            setup_campaign(&env, goal, milestone_count, &token_addr);
             CampaignContract::bump_storage(env.clone());
             CampaignContract::bump_storage(env.clone());
         });
@@ -807,6 +855,7 @@ proptest! {
     fn prop_is_asset_blocked_view_default_false(_seed in 0u64..100) {
         let env = Env::default();
         env.mock_all_auths();
+        let token_addr = register_test_token(&env);
         with_contract(&env, || {
             let asset = Address::generate(&env);
             assert!(
@@ -824,8 +873,9 @@ proptest! {
     fn prop_freeze_unfreeze_roundtrip(_seed in 0u64..100) {
         let env = Env::default();
         env.mock_all_auths();
+        let token_addr = register_test_token(&env);
         with_contract(&env, || {
-            setup_campaign(&env, 10_000, 1);
+            setup_campaign(&env, 10_000, 1, &token_addr);
 
             CampaignContract::freeze(env.clone());
             assert!(
@@ -849,8 +899,9 @@ proptest! {
     fn prop_block_unblock_asset_roundtrip(_seed in 0u64..100) {
         let env = Env::default();
         env.mock_all_auths();
+        let token_addr = register_test_token(&env);
         with_contract(&env, || {
-            setup_campaign(&env, 10_000, 1);
+            setup_campaign(&env, 10_000, 1, &token_addr);
 
             let asset = Address::generate(&env);
 
@@ -882,8 +933,9 @@ proptest! {
         let goal = total.max(100);
         let env = Env::default();
         env.mock_all_auths();
+        let token_addr = register_test_token(&env);
         with_contract(&env, || {
-            setup_campaign(&env, goal, 1);
+            setup_campaign(&env, goal, 1, &token_addr);
 
             for amount in &amounts {
                 let donor = Address::generate(&env);
@@ -911,8 +963,9 @@ proptest! {
         let goal: i128 = amounts.iter().sum::<i128>().max(100) * 10;
         let env = Env::default();
         env.mock_all_auths();
+        let token_addr = register_test_token(&env);
         with_contract(&env, || {
-            setup_campaign(&env, goal, 1);
+            setup_campaign(&env, goal, 1, &token_addr);
 
             let mut cumulative: i128 = 0;
             for amount in &amounts {
@@ -940,8 +993,9 @@ proptest! {
     ) {
         let env = Env::default();
         env.mock_all_auths();
+        let token_addr = register_test_token(&env);
         with_contract(&env, || {
-            setup_campaign(&env, goal, milestone_count);
+            setup_campaign(&env, goal, milestone_count, &token_addr);
 
             let mut prev: i128 = 0;
             for i in 0..milestone_count as u32 {

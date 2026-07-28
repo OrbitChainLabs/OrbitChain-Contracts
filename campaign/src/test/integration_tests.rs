@@ -18,13 +18,23 @@ use crate::CampaignContract;
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /// Builds a minimal valid campaign setup and returns (creator, assets, milestones).
-fn setup_basic_campaign(env: &Env) -> (Address, Vec<StellarAsset>, Vec<MilestoneData>) {
+/// Register a real SEP-41 token contract and return its address.
+/// Must be called OUTSIDE `with_contract` / `env.as_contract()`.
+fn register_test_token(env: &Env) -> Address {
+    let admin = Address::generate(env);
+    env.register_stellar_asset_contract_v2(admin).address()
+}
+
+fn setup_basic_campaign(
+    env: &Env,
+    token_addr: &Address,
+) -> (Address, Vec<StellarAsset>, Vec<MilestoneData>) {
     let creator = Address::generate(env);
 
     let mut assets: Vec<StellarAsset> = Vec::new(env);
     assets.push_back(StellarAsset {
         asset_code: String::from_str(env, "XLM"),
-        issuer: Some(Address::generate(env)),
+        issuer: Some(token_addr.clone()),
     });
 
     let mut milestones: Vec<MilestoneData> = Vec::new(env);
@@ -50,8 +60,9 @@ fn setup_basic_campaign(env: &Env) -> (Address, Vec<StellarAsset>, Vec<Milestone
 fn test_initialize_happy_path() {
     let env = Env::default();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        let (creator, assets, milestones) = setup_basic_campaign(&env);
+        let (creator, assets, milestones) = setup_basic_campaign(&env, &token_addr);
         let goal_amount: i128 = 1000;
         let end_time = env.ledger().timestamp() + 86_400; // 1 day from now
 
@@ -88,8 +99,9 @@ fn test_initialize_happy_path() {
 fn test_extend_deadline_happy_path() {
     let env = Env::default();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        let (creator, assets, milestones) = setup_basic_campaign(&env);
+        let (creator, assets, milestones) = setup_basic_campaign(&env, &token_addr);
         let end_time = env.ledger().timestamp() + 86_400;
         let new_end_time = env.ledger().timestamp() + (2 * 86_400);
 
@@ -110,8 +122,9 @@ fn test_extend_deadline_happy_path() {
 fn test_donate_happy_path() {
     let env = Env::default();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        let (creator, assets, milestones) = setup_basic_campaign(&env);
+        let (creator, assets, milestones) = setup_basic_campaign(&env, &token_addr);
         let goal_amount: i128 = 1000;
         let end_time = env.ledger().timestamp() + 86_400;
 
@@ -186,8 +199,9 @@ fn test_donate_happy_path() {
 fn test_lifecycle_end_and_refund_eligibility() {
     let env = Env::default();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        let (creator, assets, milestones) = setup_basic_campaign(&env);
+        let (creator, assets, milestones) = setup_basic_campaign(&env, &token_addr);
         let goal_amount: i128 = 1000;
         let end_time = env.ledger().timestamp() + 86_400;
 
@@ -235,6 +249,7 @@ fn test_lifecycle_end_and_refund_eligibility() {
 fn test_lifecycle_multi_milestone_unlock() {
     let env = Env::default();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
         let creator = Address::generate(&env);
         let goal_amount: i128 = 3000;
@@ -243,7 +258,7 @@ fn test_lifecycle_multi_milestone_unlock() {
         let mut assets: Vec<StellarAsset> = Vec::new(&env);
         assets.push_back(StellarAsset {
             asset_code: String::from_str(&env, "XLM"),
-            issuer: Some(Address::generate(&env)),
+            issuer: Some(token_addr),
         });
 
         // Three milestones: 1000, 2000, 3000
@@ -395,8 +410,9 @@ fn test_analytics_defaults_before_initialize() {
 fn test_campaign_analytics_report_and_summary() {
     let env = Env::default();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        let (creator, assets, milestones) = setup_basic_campaign(&env);
+        let (creator, assets, milestones) = setup_basic_campaign(&env, &token_addr);
         let goal_amount: i128 = 1000;
         let end_time = env.ledger().timestamp() + 86_400;
 
@@ -475,8 +491,9 @@ fn test_get_donor_record_non_donor() {
 fn test_donate_below_minimum_panics_assert() {
     let env = Env::default();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        let (creator, assets, milestones) = setup_basic_campaign(&env);
+        let (creator, assets, milestones) = setup_basic_campaign(&env, &token_addr);
         let end_time = env.ledger().timestamp() + 86_400;
 
         CampaignContract::initialize(
@@ -502,6 +519,7 @@ fn test_donate_below_minimum_panics_assert() {
 fn test_donate_uninitialized() {
     let env = Env::default();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
         let donor = Address::generate(&env);
         CampaignContract::donate(env.clone(), donor.clone(), 100, AssetInfo::Native);
