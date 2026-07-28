@@ -1,0 +1,198 @@
+---
+source: campaign/src/test/event_snapshot_tests.rs
+expression: log
+---
+== cancel_campaign ==
+ContractEvent {
+    ext: V0,
+    contract_id: Some(
+        ContractId(
+            Hash(0000000000000000000000000000000000000000000000000000000000000003),
+        ),
+    ),
+    type_: Contract,
+    body: V0(
+        ContractEventV0 {
+            topics: VecM(
+                [
+                    String(
+                        ScString(
+                            StringM(campaign),
+                        ),
+                    ),
+                    String(
+                        ScString(
+                            StringM(campaign_cancelled),
+                        ),
+                    ),
+                ],
+            ),
+            data: Address(
+                Contract(
+                    ContractId(
+                        Hash(0000000000000000000000000000000000000000000000000000000000000004),
+                    ),
+                ),
+            ),
+        },
+    ),
+}
+---
+== claim_refund ==
+ContractEvent {
+    ext: V0,
+    contract_id: Some(
+        ContractId(
+            Hash(48f1b6b8bc0d60f7140dd49b6120fbaf3cdbab2adaeea631313d9f0bae9532f1),
+        ),
+    ),
+    type_: Contract,
+    body: V0(
+        ContractEventV0 {
+            topics: VecM(
+                [
+                    Symbol(
+                        ScSymbol(
+                            StringM(transfer),
+                        ),
+                    ),
+                    Address(
+                        Contract(
+                            ContractId(
+                                Hash(0000000000000000000000000000000000000000000000000000000000000003),
+                            ),
+                        ),
+                    ),
+                    Address(
+                        Contract(
+                            ContractId(
+                                Hash(0000000000000000000000000000000000000000000000000000000000000005),
+                            ),
+                        ),
+                    ),
+                    String(
+                        ScString(
+                            StringM(aaa:GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEGWF),
+                        ),
+                    ),
+                ],
+            ),
+            data: I128(
+                Int128Parts {
+                    hi: 0,
+                    lo: 300,
+                },
+            ),
+        },
+    ),
+}
+---
+ContractEvent {
+    ext: V0,
+    contract_id: Some(
+        ContractId(
+            Hash(0000000000000000000000000000000000000000000000000000000000000003),
+        ),
+    ),
+    type_: Contract,
+    body: V0(
+        ContractEventV0 {
+            topics: VecM(
+                [
+                    String(
+                        ScString(
+                            StringM(campaign),
+                        ),
+                    ),
+                    String(
+                        ScString(
+                            StringM(asset_refund),
+                        ),
+                    ),
+                ],
+            ),
+            data: Vec(
+                Some(
+                    ScVec(
+                        VecM(
+                            [
+                                Address(
+                                    Contract(
+                                        ContractId(
+                                            Hash(0000000000000000000000000000000000000000000000000000000000000005),
+                                        ),
+                                    ),
+                                ),
+                                Address(
+                                    Contract(
+                                        ContractId(
+                                            Hash(48f1b6b8bc0d60f7140dd49b6120fbaf3cdbab2adaeea631313d9f0bae9532f1),
+                                        ),
+                                    ),
+                                ),
+                                I128(
+                                    Int128Parts {
+                                        hi: 0,
+                                        lo: 300,
+                                    },
+                                ),
+                            ],
+                        ),
+                    ),
+                ),
+            ),
+        },
+    ),
+}
+---
+ContractEvent {
+    ext: V0,
+    contract_id: Some(
+        ContractId(
+            Hash(0000000000000000000000000000000000000000000000000000000000000003),
+        ),
+    ),
+    type_: Contract,
+    body: V0(
+        ContractEventV0 {
+            topics: VecM(
+                [
+                    String(
+                        ScString(
+                            StringM(campaign),
+                        ),
+                    ),
+                    String(
+                        ScString(
+                            StringM(refund_claimed),
+                        ),
+                    ),
+                ],
+            ),
+            data: Vec(
+                Some(
+                    ScVec(
+                        VecM(
+                            [
+                                Address(
+                                    Contract(
+                                        ContractId(
+                                            Hash(0000000000000000000000000000000000000000000000000000000000000005),
+                                        ),
+                                    ),
+                                ),
+                                I128(
+                                    Int128Parts {
+                                        hi: 0,
+                                        lo: 300,
+                                    },
+                                ),
+                            ],
+                        ),
+                    ),
+                ),
+            ),
+        },
+    ),
+}
+---

@@ -490,6 +490,54 @@ pub fn unblock_asset(env: &Env, asset: &Address) {
     bump_persistent(env, &key);
 }
 
+// ─── Asset→donors inverse index (issue #119) ─────────────────────────────────
+
+/// Record `donor` in `asset`'s donor index. Called from donate ONLY on the
+/// donor's first donation in that asset (the caller checks the prior
+/// per-(donor, asset) amount), so no dedup scan of the vector is needed.
+pub fn record_asset_donor(env: &Env, asset: &Address, donor: &Address) {
+    let key = DataKey::AssetDonors(asset.clone());
+    let mut donors: Vec<Address> = env
+        .storage()
+        .persistent()
+        .get(&key)
+        .unwrap_or(Vec::new(env));
+    donors.push_back(donor.clone());
+    env.storage().persistent().set(&key, &donors);
+    bump_persistent(env, &key);
+}
+
+/// Number of distinct donors recorded for `asset`.
+pub fn get_asset_donor_count(env: &Env, asset: &Address) -> u32 {
+    let key = DataKey::AssetDonors(asset.clone());
+    env.storage()
+        .persistent()
+        .get::<_, Vec<Address>>(&key)
+        .map(|v| v.len())
+        .unwrap_or(0)
+}
+
+/// Paginated window over `asset`'s donor index: up to `limit` addresses
+/// starting at zero-based `start`. Out-of-range windows return an empty Vec.
+pub fn get_asset_donors_page(env: &Env, asset: &Address, start: u32, limit: u32) -> Vec<Address> {
+    let key = DataKey::AssetDonors(asset.clone());
+    let donors: Vec<Address> = env
+        .storage()
+        .persistent()
+        .get(&key)
+        .unwrap_or(Vec::new(env));
+    let mut page: Vec<Address> = Vec::new(env);
+    let end = start.saturating_add(limit).min(donors.len());
+    let mut i = start;
+    while i < end {
+        if let Some(addr) = donors.get(i) {
+            page.push_back(addr);
+        }
+        i += 1;
+    }
+    page
+}
+
 // ─── Memoised campaign report (issue #121) ───────────────────────────────────
 
 /// Read the cached dashboard report, refreshing its TTL.
