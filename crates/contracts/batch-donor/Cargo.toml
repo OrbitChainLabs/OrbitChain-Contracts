@@ -1,8 +1,9 @@
 [package]
 name = "orbitchain-batch-donor"
-version = "0.1.0"
-edition = "2021"
-license = "MIT"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
 description = "OrbitChain batch-donor contract — atomic multi-campaign donations in a single Soroban transaction. Closes #147."
 
 [lib]

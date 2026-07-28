@@ -8,8 +8,13 @@
 # `pull_request_target` is the official recipe for labeler workflows
 # because the action needs `pull-requests: write` to apply labels, and
 # that permission is only available in the base branch's context.
-# The action itself is read-only against repository code; it does not
-# evaluate `run:` from PRs.
+#
+# We explicitly check out the PR head so the labeler reads the
+# `.github/labeler.yml` from the PR branch rather than fetching the
+# base-branch copy via the API.  This lets PRs ship their own labeler
+# config fixes without a chicken-and-egg problem.  The only action
+# that consumes the checkout is `actions/labeler` (read-only YAML),
+# so the pull_request_target context remains safe.
 
 name: Pull Request Labeler
 
@@ -26,6 +31,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
       - name: Apply labels
         uses: actions/labeler@v5
         with:
