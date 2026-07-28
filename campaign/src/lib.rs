@@ -25,6 +25,7 @@
 // the warning keeps CI clean without changing the published event topics.
 #![allow(deprecated)]
 
+pub mod asset_audit;
 pub mod asset_auth;
 pub mod backend;
 pub mod contract;
@@ -133,6 +134,15 @@ impl CampaignContract {
         }
 
         validate_assets(&env, &accepted_assets)?;
+
+        // Issue #106 — Verify each token is a real SEP-41 contract before storing.
+        // (Issue #108's verify_asset_metadata is available as a separate utility
+        // for off-chain validation; see asset_audit.rs.)
+        for asset in accepted_assets.iter() {
+            if let Some(ref issuer) = asset.issuer {
+                asset_audit::verify_token_contract(&env, issuer)?;
+            }
+        }
 
         let milestone_count = milestones.len();
         if milestone_count == 0 || milestone_count > types::MAX_MILESTONES {

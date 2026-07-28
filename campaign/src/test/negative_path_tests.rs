@@ -27,11 +27,11 @@ fn make_env() -> Env {
     Env::default()
 }
 
-fn default_accepted_assets(env: &Env) -> Vec<StellarAsset> {
+fn default_accepted_assets(env: &Env, token_addr: &Address) -> Vec<StellarAsset> {
     let mut assets: Vec<StellarAsset> = Vec::new(env);
     assets.push_back(StellarAsset {
         asset_code: String::from_str(env, "XLM"),
-        issuer: Some(Address::generate(env)),
+        issuer: Some(token_addr.clone()),
     });
     assets
 }
@@ -52,10 +52,10 @@ fn default_milestones(env: &Env) -> Vec<MilestoneData> {
     milestones
 }
 
-fn initialize_default_campaign(env: &Env) -> (Address, u64) {
+fn initialize_default_campaign(env: &Env, token_addr: &Address) -> (Address, u64) {
     let creator = Address::generate(env);
     let end_time = env.ledger().timestamp() + 100_000;
-    let assets = default_accepted_assets(env);
+    let assets = default_accepted_assets(env, token_addr);
     let milestones = default_milestones(env);
     let _ = CampaignContract::initialize(
         env.clone(),
@@ -82,6 +82,14 @@ fn fund_donor(env: &Env, donor: &Address) {
     set_donor(env, donor, &record);
 }
 
+/// Register a real SEP-41 token contract and return its address.
+/// Must be called OUTSIDE `with_contract` / `env.as_contract()` because
+/// `register_stellar_asset_contract_v2` internally requires auth on the admin.
+fn register_test_token(env: &Env) -> Address {
+    let admin = Address::generate(env);
+    env.register_stellar_asset_contract_v2(admin).address()
+}
+
 fn create_donor_record(env: &Env, donor: &Address, total_donated: i128, refund_claimed: bool) {
     let record = DonorRecord {
         donor: donor.clone(),
@@ -102,8 +110,9 @@ fn create_donor_record(env: &Env, donor: &Address, total_donated: i128, refund_c
 fn test_initialize_fails_already_initialized() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        initialize_default_campaign(&env);
+        initialize_default_campaign(&env, &token_addr);
         let creator = Address::generate(&env);
         let end_time = env.ledger().timestamp() + 100_000;
         let _ = CampaignContract::initialize(
@@ -111,7 +120,7 @@ fn test_initialize_fails_already_initialized() {
             creator,
             1000,
             end_time,
-            default_accepted_assets(&env),
+            default_accepted_assets(&env, &token_addr),
             default_milestones(&env),
             0,
         );
@@ -123,6 +132,7 @@ fn test_initialize_fails_already_initialized() {
 fn test_initialize_fails_zero_goal() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
         let creator = Address::generate(&env);
         let end_time = env.ledger().timestamp() + 100_000;
@@ -131,7 +141,7 @@ fn test_initialize_fails_zero_goal() {
             creator,
             0,
             end_time,
-            default_accepted_assets(&env),
+            default_accepted_assets(&env, &token_addr),
             default_milestones(&env),
             0,
         );
@@ -143,6 +153,7 @@ fn test_initialize_fails_zero_goal() {
 fn test_initialize_fails_negative_goal() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
         let creator = Address::generate(&env);
         let end_time = env.ledger().timestamp() + 100_000;
@@ -151,7 +162,7 @@ fn test_initialize_fails_negative_goal() {
             creator,
             -100,
             end_time,
-            default_accepted_assets(&env),
+            default_accepted_assets(&env, &token_addr),
             default_milestones(&env),
             0,
         );
@@ -164,6 +175,7 @@ fn test_initialize_fails_past_end_time() {
     let env = make_env();
     env.ledger().set_timestamp(BASE);
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
         let creator = Address::generate(&env);
         let end_time = env.ledger().timestamp() - 1;
@@ -172,7 +184,7 @@ fn test_initialize_fails_past_end_time() {
             creator,
             1000,
             end_time,
-            default_accepted_assets(&env),
+            default_accepted_assets(&env, &token_addr),
             default_milestones(&env),
             0,
         );
@@ -184,6 +196,7 @@ fn test_initialize_fails_past_end_time() {
 fn test_initialize_fails_empty_assets() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
         let creator = Address::generate(&env);
         let end_time = env.ledger().timestamp() + 100_000;
@@ -205,13 +218,14 @@ fn test_initialize_fails_empty_assets() {
 fn test_initialize_fails_empty_asset_code() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
         let creator = Address::generate(&env);
         let end_time = env.ledger().timestamp() + 100_000;
         let mut assets: Vec<StellarAsset> = Vec::new(&env);
         assets.push_back(StellarAsset {
             asset_code: String::from_str(&env, ""),
-            issuer: Some(Address::generate(&env)),
+            issuer: Some(token_addr.clone()),
         });
         let _ = CampaignContract::initialize(
             env.clone(),
@@ -230,6 +244,7 @@ fn test_initialize_fails_empty_asset_code() {
 fn test_initialize_fails_zero_milestones() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
         let creator = Address::generate(&env);
         let end_time = env.ledger().timestamp() + 100_000;
@@ -239,7 +254,7 @@ fn test_initialize_fails_zero_milestones() {
             creator,
             1000,
             end_time,
-            default_accepted_assets(&env),
+            default_accepted_assets(&env, &token_addr),
             empty_milestones,
             0,
         );
@@ -251,6 +266,7 @@ fn test_initialize_fails_zero_milestones() {
 fn test_initialize_fails_too_many_milestones() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
         let creator = Address::generate(&env);
         let end_time = env.ledger().timestamp() + 100_000;
@@ -273,7 +289,7 @@ fn test_initialize_fails_too_many_milestones() {
             creator,
             6000,
             end_time,
-            default_accepted_assets(&env),
+            default_accepted_assets(&env, &token_addr),
             milestones,
             0,
         );
@@ -285,6 +301,7 @@ fn test_initialize_fails_too_many_milestones() {
 fn test_initialize_fails_milestone_targets_not_ascending() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
         let creator = Address::generate(&env);
         let end_time = env.ledger().timestamp() + 100_000;
@@ -316,7 +333,7 @@ fn test_initialize_fails_milestone_targets_not_ascending() {
             creator,
             500,
             end_time,
-            default_accepted_assets(&env),
+            default_accepted_assets(&env, &token_addr),
             milestones,
             0,
         );
@@ -328,6 +345,7 @@ fn test_initialize_fails_milestone_targets_not_ascending() {
 fn test_initialize_fails_milestone_last_target_not_equal_goal() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
         let creator = Address::generate(&env);
         let end_time = env.ledger().timestamp() + 100_000;
@@ -348,7 +366,7 @@ fn test_initialize_fails_milestone_last_target_not_equal_goal() {
             creator,
             1000,
             end_time,
-            default_accepted_assets(&env),
+            default_accepted_assets(&env, &token_addr),
             milestones,
             0,
         );
@@ -362,6 +380,7 @@ fn test_initialize_fails_milestone_last_target_not_equal_goal() {
 fn test_donate_fails_not_initialized() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
         let donor = Address::generate(&env);
         CampaignContract::donate(env.clone(), donor, 100, AssetInfo::Native);
@@ -373,8 +392,9 @@ fn test_donate_fails_not_initialized() {
 fn test_donate_fails_campaign_ended() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        let (creator, _) = initialize_default_campaign(&env);
+        let (creator, _) = initialize_default_campaign(&env, &token_addr);
         CampaignContract::end_campaign(env.clone());
         let donor = Address::generate(&env);
         CampaignContract::donate(env.clone(), donor, 100, AssetInfo::Native);
@@ -386,8 +406,9 @@ fn test_donate_fails_campaign_ended() {
 fn test_donate_fails_campaign_cancelled() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        initialize_default_campaign(&env);
+        initialize_default_campaign(&env, &token_addr);
         CampaignContract::cancel_campaign(env.clone());
         let donor = Address::generate(&env);
         CampaignContract::donate(env.clone(), donor, 100, AssetInfo::Native);
@@ -399,8 +420,9 @@ fn test_donate_fails_campaign_cancelled() {
 fn test_donate_fails_zero_amount() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        initialize_default_campaign(&env);
+        initialize_default_campaign(&env, &token_addr);
         let donor = Address::generate(&env);
         CampaignContract::donate(env.clone(), donor, 0, AssetInfo::Native);
     });
@@ -411,8 +433,9 @@ fn test_donate_fails_zero_amount() {
 fn test_donate_fails_negative_amount() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        initialize_default_campaign(&env);
+        initialize_default_campaign(&env, &token_addr);
         let donor = Address::generate(&env);
         CampaignContract::donate(env.clone(), donor, -100, AssetInfo::Native);
     });
@@ -423,6 +446,7 @@ fn test_donate_fails_negative_amount() {
 fn test_donate_fails_below_minimum() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
         let creator = Address::generate(&env);
         let end_time = env.ledger().timestamp() + 100_000;
@@ -431,7 +455,7 @@ fn test_donate_fails_below_minimum() {
             creator,
             1000,
             end_time,
-            default_accepted_assets(&env),
+            default_accepted_assets(&env, &token_addr),
             default_milestones(&env),
             100,
         );
@@ -445,8 +469,9 @@ fn test_donate_fails_below_minimum() {
 fn test_donate_fails_on_donation_count_overflow() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        initialize_default_campaign(&env);
+        initialize_default_campaign(&env, &token_addr);
         let donor = Address::generate(&env);
 
         // Manually create a donor record with max donation count
@@ -472,6 +497,7 @@ fn test_donate_fails_on_donation_count_overflow() {
 fn test_claim_refund_fails_not_initialized() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
         let donor = Address::generate(&env);
         CampaignContract::claim_refund(env.clone(), donor);
@@ -483,8 +509,9 @@ fn test_claim_refund_fails_not_initialized() {
 fn test_claim_refund_fails_no_donor_record() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        initialize_default_campaign(&env);
+        initialize_default_campaign(&env, &token_addr);
         CampaignContract::cancel_campaign(env.clone());
         let donor = Address::generate(&env);
         CampaignContract::claim_refund(env.clone(), donor);
@@ -496,8 +523,9 @@ fn test_claim_refund_fails_no_donor_record() {
 fn test_claim_refund_fails_campaign_active() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        initialize_default_campaign(&env);
+        initialize_default_campaign(&env, &token_addr);
         let donor = Address::generate(&env);
         fund_donor(&env, &donor);
         CampaignContract::claim_refund(env.clone(), donor);
@@ -509,8 +537,9 @@ fn test_claim_refund_fails_campaign_active() {
 fn test_claim_refund_fails_already_claimed() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        initialize_default_campaign(&env);
+        initialize_default_campaign(&env, &token_addr);
         CampaignContract::cancel_campaign(env.clone());
         let donor = Address::generate(&env);
         create_donor_record(&env, &donor, 500, true);
@@ -533,8 +562,9 @@ fn test_is_refund_eligible_fails_no_campaign() {
 fn test_is_refund_eligible_fails_no_donor_record() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        initialize_default_campaign(&env);
+        initialize_default_campaign(&env, &token_addr);
         CampaignContract::cancel_campaign(env.clone());
         let donor = Address::generate(&env);
         let eligible = CampaignContract::is_refund_eligible(env.clone(), donor);
@@ -546,8 +576,9 @@ fn test_is_refund_eligible_fails_no_donor_record() {
 fn test_is_refund_eligible_fails_active_campaign() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        initialize_default_campaign(&env);
+        initialize_default_campaign(&env, &token_addr);
         let donor = Address::generate(&env);
         create_donor_record(&env, &donor, 100, false);
         let eligible = CampaignContract::is_refund_eligible(env.clone(), donor);
@@ -559,6 +590,7 @@ fn test_is_refund_eligible_fails_active_campaign() {
 fn test_is_refund_eligible_fails_goal_reached() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
         let creator = Address::generate(&env);
         let end_time = env.ledger().timestamp() + 100_000;
@@ -567,7 +599,7 @@ fn test_is_refund_eligible_fails_goal_reached() {
             creator,
             1000,
             end_time,
-            default_accepted_assets(&env),
+            default_accepted_assets(&env, &token_addr),
             default_milestones(&env),
             0,
         );
@@ -587,6 +619,7 @@ fn test_is_refund_eligible_fails_window_closed() {
     let env = make_env();
     env.ledger().set_timestamp(BASE);
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
         let creator = Address::generate(&env);
         // Initialize with future end_time, then manually set to past + Ended
@@ -596,7 +629,7 @@ fn test_is_refund_eligible_fails_window_closed() {
             creator.clone(),
             1000,
             future_end,
-            default_accepted_assets(&env),
+            default_accepted_assets(&env, &token_addr),
             default_milestones(&env),
             0,
         );
@@ -615,8 +648,9 @@ fn test_is_refund_eligible_fails_window_closed() {
 fn test_is_refund_eligible_fails_already_claimed() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        initialize_default_campaign(&env);
+        initialize_default_campaign(&env, &token_addr);
         CampaignContract::cancel_campaign(env.clone());
         let donor = Address::generate(&env);
         create_donor_record(&env, &donor, 100, true);
@@ -629,8 +663,9 @@ fn test_is_refund_eligible_fails_already_claimed() {
 fn test_is_refund_eligible_fails_ended_with_released_milestones() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        initialize_default_campaign(&env);
+        initialize_default_campaign(&env, &token_addr);
         let mut milestone = crate::storage::get_milestone(&env, 0).unwrap();
         milestone.status = MilestoneStatus::Released;
         milestone.released_amount = 1000;
@@ -653,6 +688,7 @@ fn test_is_refund_eligible_fails_ended_with_released_milestones() {
 fn test_end_campaign_fails_not_initialized() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
         CampaignContract::end_campaign(env.clone());
     });
@@ -663,8 +699,9 @@ fn test_end_campaign_fails_not_initialized() {
 fn test_end_campaign_fails_already_ended() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        initialize_default_campaign(&env);
+        initialize_default_campaign(&env, &token_addr);
         CampaignContract::end_campaign(env.clone());
         CampaignContract::end_campaign(env.clone());
     });
@@ -675,8 +712,9 @@ fn test_end_campaign_fails_already_ended() {
 fn test_end_campaign_fails_cancelled() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        initialize_default_campaign(&env);
+        initialize_default_campaign(&env, &token_addr);
         CampaignContract::cancel_campaign(env.clone());
         CampaignContract::end_campaign(env.clone());
     });
@@ -689,6 +727,7 @@ fn test_end_campaign_fails_cancelled() {
 fn test_cancel_campaign_fails_not_initialized() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
         CampaignContract::cancel_campaign(env.clone());
     });
@@ -699,8 +738,9 @@ fn test_cancel_campaign_fails_not_initialized() {
 fn test_cancel_campaign_fails_already_cancelled() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        initialize_default_campaign(&env);
+        initialize_default_campaign(&env, &token_addr);
         CampaignContract::cancel_campaign(env.clone());
         CampaignContract::cancel_campaign(env.clone());
     });
@@ -713,6 +753,7 @@ fn test_cancel_campaign_fails_already_cancelled() {
 fn test_extend_deadline_fails_not_initialized() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
         CampaignContract::extend_deadline(env.clone(), 999_999);
     });
@@ -724,8 +765,9 @@ fn test_extend_deadline_fails_past_time() {
     let env = make_env();
     env.ledger().set_timestamp(BASE);
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        initialize_default_campaign(&env);
+        initialize_default_campaign(&env, &token_addr);
         let past_time = env.ledger().timestamp() - 1;
         CampaignContract::extend_deadline(env.clone(), past_time);
     });
@@ -737,8 +779,9 @@ fn test_extend_deadline_fails_absurd_future_time() {
     let env = make_env();
     env.ledger().set_timestamp(BASE);
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        initialize_default_campaign(&env);
+        initialize_default_campaign(&env, &token_addr);
         let too_far = env.ledger().timestamp() + MAX_DEADLINE_GAP_SECONDS + 1;
         CampaignContract::extend_deadline(env.clone(), too_far);
     });
@@ -749,8 +792,9 @@ fn test_extend_deadline_fails_absurd_future_time() {
 fn test_extend_deadline_fails_cancelled() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        initialize_default_campaign(&env);
+        initialize_default_campaign(&env, &token_addr);
         CampaignContract::cancel_campaign(env.clone());
         CampaignContract::extend_deadline(env.clone(), 999_999);
     });
@@ -767,6 +811,7 @@ fn test_extend_deadline_fails_cancelled() {
 fn test_reentrancy_lock_donate_twice_succeeds() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     let contract_id = env.register_contract(None, crate::CampaignContract);
     let client = CampaignContractClient::new(&env, &contract_id);
 
@@ -774,7 +819,7 @@ fn test_reentrancy_lock_donate_twice_succeeds() {
 
     // Setup storage inside as_contract
     env.as_contract(&contract_id, || {
-        initialize_default_campaign(&env);
+        initialize_default_campaign(&env, &token_addr);
     });
 
     // Donate through client outside as_contract — each call is a fresh invocation
@@ -795,8 +840,9 @@ fn test_reentrancy_lock_donate_twice_succeeds() {
 fn test_claim_refund_eligible_cancelled() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        initialize_default_campaign(&env);
+        initialize_default_campaign(&env, &token_addr);
         CampaignContract::cancel_campaign(env.clone());
         let donor = Address::generate(&env);
         create_donor_record(&env, &donor, 500, false);
@@ -824,8 +870,9 @@ fn test_get_milestone_view_fails_not_initialized() {
 fn test_get_milestone_view_fails_out_of_bounds() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        initialize_default_campaign(&env);
+        initialize_default_campaign(&env, &token_addr);
         CampaignContract::get_milestone_view(env.clone(), 99);
     });
 }
@@ -836,8 +883,9 @@ fn test_get_milestone_view_fails_out_of_bounds() {
 fn test_edge_case_zero_donations() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        initialize_default_campaign(&env);
+        initialize_default_campaign(&env, &token_addr);
         let total = CampaignContract::get_total_raised(env.clone());
         assert_eq!(total, 0, "No donations yet");
     });
@@ -847,8 +895,9 @@ fn test_edge_case_zero_donations() {
 fn test_edge_case_no_donor_record() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        initialize_default_campaign(&env);
+        initialize_default_campaign(&env, &token_addr);
         let stranger = Address::generate(&env);
         let record = CampaignContract::get_donor_record(env.clone(), stranger);
         assert!(record.is_none(), "Stranger should have no donor record");
@@ -870,6 +919,7 @@ fn test_refund_window_edge_boundary() {
     let env = make_env();
     env.ledger().set_timestamp(BASE);
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
         let creator = Address::generate(&env);
         // Initialize with future end_time, then manually set to exact boundary
@@ -879,7 +929,7 @@ fn test_refund_window_edge_boundary() {
             creator.clone(),
             1000,
             future_end,
-            default_accepted_assets(&env),
+            default_accepted_assets(&env, &token_addr),
             default_milestones(&env),
             0,
         );
@@ -899,6 +949,7 @@ fn test_refund_window_just_after_boundary() {
     let env = make_env();
     env.ledger().set_timestamp(BASE);
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
         let creator = Address::generate(&env);
         // Initialize with future end_time, then manually set to just past boundary
@@ -908,7 +959,7 @@ fn test_refund_window_just_after_boundary() {
             creator.clone(),
             1000,
             future_end,
-            default_accepted_assets(&env),
+            default_accepted_assets(&env, &token_addr),
             default_milestones(&env),
             0,
         );
@@ -933,8 +984,9 @@ fn test_refund_window_just_after_boundary() {
 fn test_upgrade_fails_when_frozen() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        initialize_default_campaign(&env);
+        initialize_default_campaign(&env, &token_addr);
         CampaignContract::freeze(env.clone());
         let hash = BytesN::from_array(&env, &[1u8; 32]);
         CampaignContract::upgrade(env.clone(), hash);
@@ -945,8 +997,9 @@ fn test_upgrade_fails_when_frozen() {
 fn test_upgrade_succeeds_when_not_frozen() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        initialize_default_campaign(&env);
+        initialize_default_campaign(&env, &token_addr);
         // Verify the contract is not frozen by default; upgrade should not panic on the
         // freeze check (it will panic later when the deployer rejects the dummy hash,
         // so we only assert that is_frozen returns false before the call).
@@ -961,8 +1014,9 @@ fn test_upgrade_succeeds_when_not_frozen() {
 fn test_upgrade_succeeds_after_unfreeze() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        initialize_default_campaign(&env);
+        initialize_default_campaign(&env, &token_addr);
         CampaignContract::freeze(env.clone());
         assert!(crate::storage::is_frozen(&env), "Contract should be frozen");
         CampaignContract::unfreeze(env.clone());
@@ -994,6 +1048,7 @@ fn test_hello() {
 #[should_panic(expected = "HostError")]
 fn test_initialize_requires_auth() {
     let env = make_env();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
         let creator = Address::generate(&env);
         let end_time = env.ledger().timestamp() + 100_000;
@@ -1002,7 +1057,7 @@ fn test_initialize_requires_auth() {
             creator,
             1000,
             end_time,
-            default_accepted_assets(&env),
+            default_accepted_assets(&env, &token_addr),
             default_milestones(&env),
             0,
         );
@@ -1015,8 +1070,9 @@ fn test_initialize_requires_auth() {
 fn test_full_lifecycle_happy_path() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        let (creator, _) = initialize_default_campaign(&env);
+        let (creator, _) = initialize_default_campaign(&env, &token_addr);
         let status = CampaignContract::get_campaign_status(env.clone());
         assert_eq!(status.status, CampaignStatus::Active);
         assert!(status.days_remaining > 0);
@@ -1033,8 +1089,9 @@ fn test_full_lifecycle_happy_path() {
 fn test_end_then_refund_eligible() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        initialize_default_campaign(&env);
+        initialize_default_campaign(&env, &token_addr);
         CampaignContract::end_campaign(env.clone());
         let status = CampaignContract::get_campaign_status(env.clone());
         assert_eq!(status.status, CampaignStatus::Ended);
@@ -1049,8 +1106,9 @@ fn test_end_then_refund_eligible() {
 fn test_cancel_then_refund_eligible() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        initialize_default_campaign(&env);
+        initialize_default_campaign(&env, &token_addr);
         CampaignContract::cancel_campaign(env.clone());
         let status = CampaignContract::get_campaign_status(env.clone());
         assert_eq!(status.status, CampaignStatus::Cancelled);
@@ -1068,8 +1126,9 @@ fn test_cancel_then_refund_eligible() {
 fn test_end_campaign_frozen_panics() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        initialize_default_campaign(&env);
+        initialize_default_campaign(&env, &token_addr);
         crate::storage::set_frozen(&env, true);
         CampaignContract::end_campaign(env.clone());
     });
@@ -1080,8 +1139,9 @@ fn test_end_campaign_frozen_panics() {
 fn test_cancel_campaign_frozen_panics() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        initialize_default_campaign(&env);
+        initialize_default_campaign(&env, &token_addr);
         crate::storage::set_frozen(&env, true);
         CampaignContract::cancel_campaign(env.clone());
     });
@@ -1092,8 +1152,9 @@ fn test_cancel_campaign_frozen_panics() {
 fn test_extend_deadline_frozen_panics() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        initialize_default_campaign(&env);
+        initialize_default_campaign(&env, &token_addr);
         crate::storage::set_frozen(&env, true);
         let new_end = env.ledger().timestamp() + 200_000;
         CampaignContract::extend_deadline(env.clone(), new_end);
@@ -1104,8 +1165,9 @@ fn test_extend_deadline_frozen_panics() {
 fn test_end_campaign_not_frozen_succeeds() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        initialize_default_campaign(&env);
+        initialize_default_campaign(&env, &token_addr);
         CampaignContract::end_campaign(env.clone());
         let status = CampaignContract::get_campaign_status(env.clone());
         assert_eq!(status.status, CampaignStatus::Ended);
@@ -1116,8 +1178,9 @@ fn test_end_campaign_not_frozen_succeeds() {
 fn test_cancel_campaign_not_frozen_succeeds() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        initialize_default_campaign(&env);
+        initialize_default_campaign(&env, &token_addr);
         CampaignContract::cancel_campaign(env.clone());
         let status = CampaignContract::get_campaign_status(env.clone());
         assert_eq!(status.status, CampaignStatus::Cancelled);
@@ -1128,8 +1191,9 @@ fn test_cancel_campaign_not_frozen_succeeds() {
 fn test_extend_deadline_not_frozen_succeeds() {
     let env = make_env();
     env.mock_all_auths();
+    let token_addr = register_test_token(&env);
     with_contract(&env, || {
-        initialize_default_campaign(&env);
+        initialize_default_campaign(&env, &token_addr);
         let new_end = env.ledger().timestamp() + 200_000;
         CampaignContract::extend_deadline(env.clone(), new_end);
         let campaign = get_campaign(&env).unwrap();

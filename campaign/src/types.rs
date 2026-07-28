@@ -116,6 +116,8 @@ pub enum Error {
     // ── Asset block ───────────────────────────────────────────────────── 9x
     /// Donations in this asset are blocked by the admin.
     AssetBlocked = 90,
+    /// Token contract address is not a valid SEP-41 token (missing name, symbol, or decimals).
+    InvalidTokenContract = 91,
 }
 
 #[cfg(test)]
@@ -167,6 +169,7 @@ mod error_code_tests {
             Error::InvalidAmount as u32,
             Error::ContractFrozen as u32,
             Error::AssetBlocked as u32,
+            Error::InvalidTokenContract as u32,
         ];
         for (index, code) in campaign_codes.iter().enumerate() {
             assert!(!campaign_codes[index + 1..].contains(code));
