@@ -122,13 +122,12 @@ pub fn campaign_initialized(
         milestone_count,
         created_at_ledger,
     };
-    env.events()
-        .publish(("campaign", "initialized"), old_event);
+    env.events().publish(("campaign", "initialized"), old_event);
 }
 
 /// Emitted when the campaign ends (deadline passed or ended early).
 pub fn campaign_ended(env: &Env) {
-    crate::events::CampaignEnded {}.publish(env);
+    crate::events::CampaignEnded { reserved: 0 }.publish(env);
     env.events().publish(("campaign", "campaign_ended"), ());
 }
 
@@ -191,12 +190,7 @@ pub fn asset_refund(env: &Env, donor: &Address, asset_address: &Address, refund_
 // ── Admin events ──────────────────────────────────────────────────────────────
 
 /// Emitted when the contract is upgraded by the admin.
-pub fn contract_upgraded(
-    env: &Env,
-    admin: &Address,
-    new_wasm_hash: BytesN<32>,
-    timestamp: u64,
-) {
+pub fn contract_upgraded(env: &Env, admin: &Address, new_wasm_hash: BytesN<32>, timestamp: u64) {
     crate::events::ContractUpgraded {
         admin: admin.clone(),
         new_wasm_hash: new_wasm_hash.clone(),

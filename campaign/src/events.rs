@@ -58,7 +58,10 @@ pub struct CampaignInitialized {
 
 /// Emitted when the campaign transitions to the `Ended` state.
 #[contractevent]
-pub struct CampaignEnded;
+pub struct CampaignEnded {
+    /// Always 0; reserved for forward compatibility.
+    pub reserved: u32,
+}
 
 /// Emitted when the campaign creator cancels the campaign.
 #[contractevent]
