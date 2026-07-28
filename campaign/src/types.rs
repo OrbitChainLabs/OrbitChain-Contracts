@@ -116,6 +116,15 @@ pub enum Error {
     // ── Asset block ───────────────────────────────────────────────────── 9x
     /// Donations in this asset are blocked by the admin.
     AssetBlocked = 90,
+
+    // ── Donation receipts (issue #146) ───────────────────────────────────── 9x
+    /// Receipts are only claimable once the campaign is finalised: the goal is
+    /// reached and the final milestone has been released.
+    CampaignNotFinalised = 91,
+    /// This donor has already claimed their receipt.
+    ReceiptAlreadyClaimed = 92,
+    /// Receipts are soulbound and cannot be transferred or delegated.
+    ReceiptNonTransferable = 93,
 }
 
 #[cfg(test)]
@@ -324,6 +333,41 @@ pub enum DataKey {
     /// clients read one entry instead of recomputing from campaign +
     /// milestones + counters on every call.
     CachedReport,
+
+    // ── Persistent (appended — issue #146) ──────────────────────────────────
+    /// Soulbound donation receipt claimed by the given donor (issue #146).
+    /// Absent until the donor claims; presence doubles as the already-claimed
+    /// guard and as the token's balance lookup.
+    ReceiptData(Address),
+    /// Number of receipts claimed so far (u32).
+    ReceiptCount,
+}
+
+// ─── Donation receipt ─────────────────────────────────────────────────────────
+
+/// Soulbound proof-of-donation receipt for a single donor (issue #146).
+///
+/// Stored under `DataKey::ReceiptData(donor_address)` in persistent storage and
+/// minted once the campaign is finalised. Non-transferable by construction:
+/// the record is keyed by the donor address and the contract exposes no path
+/// that reassigns it — `transfer` / `transfer_from` / `approve` panic with
+/// `Error::ReceiptNonTransferable`.
+///
+/// `amount_donated` snapshots `DonorRecord::total_donated` at mint time so the
+/// receipt keeps a stable record of the contribution it attests to.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DonationReceipt {
+    /// The donor this receipt belongs to, permanently.
+    pub donor: Address,
+    /// Cumulative amount donated, snapshotted when the receipt was minted.
+    pub amount_donated: i128,
+    /// Campaign goal at mint time — context for what the donation contributed to.
+    pub campaign_goal: i128,
+    /// Ledger timestamp when the receipt was minted.
+    pub minted_at: u64,
+    /// Ledger number when the receipt was minted.
+    pub minted_at_ledger: u32,
 }
 
 // ─── Asset types ──────────────────────────────────────────────────────────────

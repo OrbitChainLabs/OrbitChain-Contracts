@@ -32,6 +32,7 @@ pub mod event;
 pub mod get_all_milestones;
 pub mod get_milestone;
 pub mod multi_asset_release;
+pub mod receipt;
 pub mod release_milestone;
 pub mod reports;
 pub mod storage;
@@ -52,8 +53,8 @@ use storage::{
 
 use types::{
     AssetInfo, CampaignData, CampaignInitializedEvent, CampaignReport, CampaignStatus,
-    CampaignStatusResponse, DashboardMetrics, DonorRecord, Error, MilestoneData, PlatformSummary,
-    StellarAsset,
+    CampaignStatusResponse, DashboardMetrics, DonationReceipt, DonorRecord, Error, MilestoneData,
+    PlatformSummary, StellarAsset,
 };
 
 use reports::{
@@ -629,6 +630,71 @@ impl CampaignContract {
         refresh_report_cache(&env);
     }
 
+    // ── Donation receipts (issue #146) ──────────────────────────────────────
+
+    /// Issue #146 – Claim this donor's soulbound donation receipt.
+    ///
+    /// Requires the campaign to be finalised (goal reached and final milestone
+    /// released), the caller to have donated, and no prior claim. Authorisation:
+    /// `donor.require_auth()` — donors claim their own receipt.
+    pub fn claim_receipt(env: Env, donor: Address) -> DonationReceipt {
+        receipt::claim_receipt(&env, donor)
+    }
+
+    /// Issue #146 – Whether the campaign is finalised and receipts are claimable.
+    /// No auth required (read-only view).
+    pub fn is_finalised(env: Env) -> bool {
+        receipt::is_finalised(&env)
+    }
+
+    /// Issue #146 – Read a donor's receipt. `None` if never claimed.
+    /// No auth required (read-only view).
+    pub fn get_receipt(env: Env, donor: Address) -> Option<DonationReceipt> {
+        receipt::get_receipt_for(&env, donor)
+    }
+
+    /// Issue #146 – Token-shaped receipt balance: `1` if held, else `0`.
+    /// No auth required (read-only view).
+    pub fn receipt_balance(env: Env, donor: Address) -> i128 {
+        receipt::balance(&env, donor)
+    }
+
+    /// Issue #146 – Total receipts claimed so far.
+    /// No auth required (read-only view).
+    pub fn receipt_total_supply(env: Env) -> u32 {
+        receipt::total_supply(&env)
+    }
+
+    /// Issue #146 – Soulbound: always panics with `ReceiptNonTransferable`.
+    ///
+    /// Exposed deliberately so the non-transferability is explicit on-chain and
+    /// callers get a precise error rather than a missing-function failure.
+    pub fn receipt_transfer(env: Env, from: Address, to: Address, amount: i128) {
+        receipt::transfer(&env, from, to, amount);
+    }
+
+    /// Issue #146 – Soulbound: always panics with `ReceiptNonTransferable`.
+    pub fn receipt_transfer_from(
+        env: Env,
+        spender: Address,
+        from: Address,
+        to: Address,
+        amount: i128,
+    ) {
+        receipt::transfer_from(&env, spender, from, to, amount);
+    }
+
+    /// Issue #146 – Soulbound: always panics with `ReceiptNonTransferable`.
+    pub fn receipt_approve(
+        env: Env,
+        from: Address,
+        spender: Address,
+        amount: i128,
+        expiration_ledger: u32,
+    ) {
+        receipt::approve(&env, from, spender, amount, expiration_ledger);
+    }
+
     /// Issue #199 – Get milestone view (raw data).
     /// No auth required (read-only view).
     pub fn get_milestone_view(env: Env, index: u32) -> MilestoneData {
@@ -808,6 +874,7 @@ mod test {
     pub mod invariant_tests;
     pub mod milestone_batch_tests;
     pub mod negative_path_tests;
+    pub mod receipt_tests;
     pub mod refund_eligibility_tests;
     pub mod release_milestone_tests;
     pub mod report_cache_tests;
