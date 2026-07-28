@@ -28,6 +28,15 @@ const BASE_FEE: i128 = 100;
 /// Each variant has a stable `u32` discriminant — **never renumber**.
 /// Callers can match on these codes programmatically instead of parsing
 /// opaque string messages out of `HostError` panics.
+///
+/// ## Relationship to `common::CommonError` (issue #103)
+///
+/// Several variants below share semantics with [`common::CommonError`].
+/// The mapping is documented inline on each variant.  Because two
+/// `#[contracterror]` enums with the same `u32` value produce identical
+/// on-chain error codes, `orbitchain-common` deliberately does **not**
+/// annotate `CommonError` with `#[contracterror]`; the numeric codes
+/// remain contract-local while `CommonError` acts as the semantic authority.
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum CoreError {
@@ -40,10 +49,14 @@ pub enum CoreError {
     /// The campaign does not have enough raised funds for the requested amount.
     InsufficientFunds = 4,
     /// The caller is not authorised to perform this operation.
+    ///
+    /// Semantic equivalent: [`common::CommonError::Unauthorized`].
     Unauthorized = 5,
     /// The asset symbol must be non-empty.
     AssetNotSpecified = 6,
     /// The contract has not been initialised (no admin set).
+    ///
+    /// Semantic equivalent: [`common::CommonError::NotInitialized`].
     NotInitialized = 7,
     /// No pending withdrawal request exists for this campaign.
     NoPendingWithdrawal = 8,

@@ -10,9 +10,27 @@ use soroban_sdk::{
 ///
 /// Codes are stable — never renumber an existing variant; only append new ones.
 /// Each code maps to a `u32` via `contracterror` and is surfaced in transaction
-/// results as `Error(Contract, #N)`. The shared `orbitchain-common` crate
-/// intentionally does not define a `#[contracterror]` enum, so these campaign
-/// discriminants cannot collide with a second shared error space.
+/// results as `Error(Contract, #N)`.
+///
+/// ## Relationship to `common::CommonError` (issue #103)
+///
+/// [`common::CommonError`] is the *semantic* single source of truth for
+/// generic error concepts shared across crates (overflow, uninitialised state,
+/// etc.).  Because two `#[contracterror]` enums with the same `u32` value
+/// produce identical on-chain codes — making them indistinguishable to callers
+/// — the `orbitchain-common` crate deliberately does **not** annotate its error
+/// catalogue with `#[contracterror]`.  Instead, each variant here that maps to
+/// a `CommonError` concept carries a doc comment listing the corresponding
+/// `common::CommonError` variant, giving contributors one canonical description
+/// without creating a duplicate on-chain discriminant space.
+///
+/// | This variant              | `common::CommonError` mapping |
+/// |---------------------------|-------------------------------|
+/// | `NotInitialized` (2)      | `CommonError::NotInitialized` |
+/// | `Unauthorized` (3)        | `CommonError::Unauthorized`   |
+/// | `Overflow` (17)           | `CommonError::Overflow`       |
+/// | `InvalidAmount` (70)      | `CommonError::InvalidAmount`  |
+/// | `StorageWriteError` (26)  | `CommonError::StorageWriteError` |
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Error {
@@ -20,8 +38,12 @@ pub enum Error {
     /// `initialize` called on an already-initialised contract.
     AlreadyInitialized = 1,
     /// Contract has not been initialised yet.
+    ///
+    /// Semantic equivalent: [`common::CommonError::NotInitialized`].
     NotInitialized = 2,
     /// Caller is not authorised to perform the operation.
+    ///
+    /// Semantic equivalent: [`common::CommonError::Unauthorized`].
     Unauthorized = 3,
     /// The campaign deadline has already passed.
     CampaignEnded = 4,
@@ -50,6 +72,8 @@ pub enum Error {
     /// Contract does not hold enough funds to fulfil the requested transfer.
     InsufficientContractBalance = 16,
     /// A checked arithmetic operation overflowed.
+    ///
+    /// Semantic equivalent: [`common::CommonError::Overflow`].
     Overflow = 17,
 
     // ── Additional contract errors ─────────────────────────────────────────
@@ -71,6 +95,8 @@ pub enum Error {
     /// A storage read returned an unexpectedly invalid value.
     InvalidStorageValue = 25,
     /// A storage write failed (entry too large, quota exceeded, etc.).
+    ///
+    /// Semantic equivalent: [`common::CommonError::StorageWriteError`].
     StorageWriteError = 26,
 
     // ── Asset / transfer ───────────────────────────────────────────────── 3x
@@ -107,6 +133,8 @@ pub enum Error {
 
     // ── Amount validation ───────────────────────────────────────────────────────── 7x
     /// A generic negative or otherwise invalid amount was supplied.
+    ///
+    /// Semantic equivalent: [`common::CommonError::InvalidAmount`].
     InvalidAmount = 70,
 
     // ── Upgrade / freeze ─────────────────────────────────────────────────── 8x
@@ -123,9 +151,12 @@ mod error_code_tests {
     use super::Error;
     #[test]
     fn campaign_error_discriminants_are_unique_without_common_error_space() {
-        // `orbitchain-common` intentionally exposes no `#[contracterror]` enum;
-        // this guards the remaining campaign-local error space against internal
-        // duplicate discriminants while preserving the stable on-chain codes.
+        // `orbitchain-common` intentionally exposes `CommonError` without the
+        // `#[contracterror]` attribute (issue #103).  This guards the campaign-local
+        // error space against internal duplicate discriminants while preserving
+        // the stable on-chain codes.  The shared semantic meanings are documented
+        // on each variant via a `/// Semantic equivalent: [common::CommonError::…]`
+        // doc comment so contributors have a single authoritative description.
         let campaign_codes = [
             Error::AlreadyInitialized as u32,
             Error::NotInitialized as u32,
