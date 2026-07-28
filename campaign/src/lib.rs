@@ -19,16 +19,19 @@
 //! be used for new campaign development.
 
 #![no_std]
-// `Events::publish` and a few call sites on `Ledger` are marked deprecated in
-// soroban-sdk 26.x in favour of `#[contractevent]` and the new ledger APIs.
-// Migrating every call site here is tracked as a follow-up issue; suppressing
-// the warning keeps CI clean without changing the published event topics.
+// `Ledger` API call sites (e.g. `.timestamp()`, `.sequence()`) are marked
+// deprecated in soroban-sdk 26.x in favour of the new ledger APIs.
+// `Events::publish` calls have been moved into `event.rs` (the
+// backward-compatibility shim) which carries its own `#![allow(deprecated)]`.
+// This blanket suppression remains for the Ledger deprecations until those
+// call sites are migrated in a follow-up issue.
 #![allow(deprecated)]
 
 pub mod asset_auth;
 pub mod backend;
 pub mod contract;
 pub mod event;
+pub mod events;
 pub mod get_all_milestones;
 pub mod get_milestone;
 pub mod multi_asset_release;
@@ -51,9 +54,8 @@ use storage::{
 };
 
 use types::{
-    AssetInfo, CampaignData, CampaignInitializedEvent, CampaignReport, CampaignStatus,
-    CampaignStatusResponse, DashboardMetrics, DonorRecord, Error, MilestoneData, PlatformSummary,
-    StellarAsset,
+    AssetInfo, CampaignData, CampaignReport, CampaignStatus, CampaignStatusResponse,
+    DashboardMetrics, DonorRecord, Error, MilestoneData, PlatformSummary, StellarAsset,
 };
 
 use reports::{
@@ -161,16 +163,14 @@ impl CampaignContract {
             set_milestone(&env, index as u32, &milestone);
         }
 
-        env.events().publish(
-            ("campaign", "initialized"),
-            CampaignInitializedEvent {
-                creator,
-                goal_amount,
-                end_time,
-                asset_count: accepted_assets.len(),
-                milestone_count,
-                created_at_ledger: env.ledger().sequence(),
-            },
+        event::campaign_initialized(
+            &env,
+            &creator,
+            goal_amount,
+            end_time,
+            accepted_assets.len(),
+            milestone_count,
+            env.ledger().sequence(),
         );
 
         refresh_report_cache(&env);
@@ -233,10 +233,7 @@ impl CampaignContract {
             && campaign.status == CampaignStatus::Active
         {
             campaign.status = CampaignStatus::GoalReached;
-            env.events().publish(
-                ("campaign", "campaign_goal_reached"),
-                campaign.raised_amount,
-            );
+            event::campaign_goal_reached(&env, campaign.raised_amount);
         }
 
         set_campaign(&env, &campaign);
@@ -541,19 +538,13 @@ impl CampaignContract {
                             );
 
                             // Emit event for this asset's refund
-                            env.events().publish(
-                                ("campaign", "asset_refund"),
-                                (donor.clone(), asset_address, refund_amount),
-                            );
+                            event::asset_refund(&env, &donor, &asset_address, refund_amount);
                         }
                     }
                 }
 
                 // Emit overall refund claimed event
-                env.events().publish(
-                    ("campaign", "refund_claimed"),
-                    (&donor, donor_record.total_donated),
-                );
+                event::refund_claimed(&env, &donor, donor_record.total_donated);
 
                 refresh_report_cache(&env);
 
