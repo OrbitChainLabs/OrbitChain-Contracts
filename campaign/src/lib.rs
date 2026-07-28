@@ -25,6 +25,7 @@
 // the warning keeps CI clean without changing the published event topics.
 #![allow(deprecated)]
 
+pub mod admin;
 pub mod asset_auth;
 pub mod backend;
 pub mod contract;
@@ -39,7 +40,7 @@ pub mod types;
 pub mod validation;
 pub mod views;
 
-use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, Vec};
+use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env, Vec};
 use storage::{
     acquire_lock, block_asset, bump_all_persistent, get_cached_report_storage, get_campaign,
     get_donor, get_donor_asset_donation, get_milestone, increment_donor_asset_donation,
@@ -51,9 +52,9 @@ use storage::{
 };
 
 use types::{
-    AssetInfo, CampaignData, CampaignInitializedEvent, CampaignReport, CampaignStatus,
-    CampaignStatusResponse, DashboardMetrics, DonorRecord, Error, MilestoneData, PlatformSummary,
-    StellarAsset,
+    ActionKind, AdminAction, AssetInfo, CampaignData, CampaignInitializedEvent, CampaignReport,
+    CampaignStatus, CampaignStatusResponse, DashboardMetrics, DonorRecord, Error, MilestoneData,
+    PlatformSummary, StellarAsset,
 };
 
 use reports::{
@@ -651,10 +652,10 @@ impl CampaignContract {
     /// - `Error::NotInitialized` if campaign not yet initialized
     /// - `Error::ContractFrozen` if the contract is currently frozen
     pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>) {
-        let campaign =
-            get_campaign(&env).unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
-
-        campaign.creator.require_auth();
+        // Issue #92 – direct call = legacy 1-of-1 path; auths the sole admin
+        // signer and panics `MultisigActive` once a multi-sig set exists.
+        let admin = admin::require_direct_admin(&env);
+        admin.require_auth();
 
         // Freeze check — consistent with donate(), claim_refund(), and release_milestone()
         if is_frozen(&env) {
@@ -666,7 +667,7 @@ impl CampaignContract {
             .update_current_contract_wasm(new_wasm_hash.clone());
 
         let timestamp = env.ledger().timestamp();
-        event::contract_upgraded(&env, &campaign.creator, new_wasm_hash, timestamp);
+        event::contract_upgraded(&env, &admin, new_wasm_hash, timestamp);
     }
 
     /// Issue #246 – Freeze the contract, blocking all mutating operations.
@@ -678,15 +679,14 @@ impl CampaignContract {
     /// - `Error::Unauthorized` if not called by the creator
     /// - `Error::NotInitialized` if campaign not yet initialized
     pub fn freeze(env: Env) {
-        let campaign =
-            get_campaign(&env).unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
-
-        campaign.creator.require_auth();
+        // Issue #92 – direct call = legacy 1-of-1 path (see upgrade()).
+        let admin = admin::require_direct_admin(&env);
+        admin.require_auth();
 
         set_frozen(&env, true);
 
         let timestamp = env.ledger().timestamp();
-        event::contract_frozen(&env, &campaign.creator, timestamp);
+        event::contract_frozen(&env, &admin, timestamp);
     }
 
     /// Issue #120 – Public TTL maintenance entrypoint.
@@ -714,15 +714,91 @@ impl CampaignContract {
     /// - `Error::Unauthorized` if not called by the creator
     /// - `Error::NotInitialized` if campaign not yet initialized
     pub fn unfreeze(env: Env) {
-        let campaign =
-            get_campaign(&env).unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
-
-        campaign.creator.require_auth();
+        // Issue #92 – direct call = legacy 1-of-1 path (see upgrade()).
+        let admin = admin::require_direct_admin(&env);
+        admin.require_auth();
 
         set_frozen(&env, false);
 
         let timestamp = env.ledger().timestamp();
-        event::contract_unfrozen(&env, &campaign.creator, timestamp);
+        event::contract_unfrozen(&env, &admin, timestamp);
+    }
+
+    // ─── Issue #92 – timelock + multi-sig admin governance ──────────────────
+
+    /// Issue #92 – Propose an admin action (upgrade / freeze / unfreeze /
+    /// extend-deadline) for the timelock + multi-sig flow. The proposer must
+    /// be an admin signer; proposing counts as the first approval. Returns
+    /// the action id.
+    ///
+    /// # Panics
+    /// - `Error::NotAdminSigner` if `proposer` is not an admin signer
+    /// - `Error::InvalidActionPayload` if the payload doesn't match the kind
+    /// - `Error::InvalidExecuteAfter` if `execute_after` is in the past
+    pub fn propose_admin_action(
+        env: Env,
+        proposer: Address,
+        kind: ActionKind,
+        payload: Bytes,
+        execute_after: u64,
+    ) -> u64 {
+        admin::propose_admin_action(&env, proposer, kind, payload, execute_after)
+    }
+
+    /// Issue #92 – Approve a pending admin action. Each signer approves once.
+    ///
+    /// # Panics
+    /// - `Error::NotAdminSigner` if `approver` is not an admin signer
+    /// - `Error::ActionNotFound` if the action doesn't exist
+    /// - `Error::AlreadyApproved` if this signer already approved
+    pub fn approve_admin_action(env: Env, approver: Address, action_id: u64) {
+        admin::approve_admin_action(&env, approver, action_id)
+    }
+
+    /// Issue #92 – Execute an approved admin action once the timelock has
+    /// elapsed and the quorum (2 approvals with a multi-sig set, 1 with the
+    /// legacy single signer) is met. The action is deleted before its effect
+    /// applies, so it can never replay.
+    ///
+    /// # Panics
+    /// - `Error::NotAdminSigner` if `executor` is not an admin signer
+    /// - `Error::ActionNotFound` if the action doesn't exist
+    /// - `Error::TimelockNotElapsed` if `execute_after` hasn't passed
+    /// - `Error::InsufficientApprovals` if approvals < quorum
+    pub fn execute_admin_action(env: Env, executor: Address, action_id: u64) {
+        admin::execute_admin_action(&env, executor, action_id)
+    }
+
+    /// Issue #92 – Replace the admin signer set. Requires auth from every
+    /// current signer, so rotating a multi-sig is itself multi-sig; with the
+    /// default `[creator]` set this is the familiar creator-only auth.
+    ///
+    /// # Panics
+    /// - `Error::InvalidSigners` if the new set is empty or has duplicates
+    pub fn set_admin_signers(env: Env, new_signers: Vec<Address>) {
+        admin::set_admin_signers(&env, new_signers)
+    }
+
+    /// Issue #92 – Current admin signer set (stored set, or `[creator]`).
+    /// No auth required (read-only view).
+    pub fn get_admin_signers(env: Env) -> Vec<Address> {
+        admin::get_admin_signers(&env)
+    }
+
+    /// Issue #92 – Fetch a pending admin action by id.
+    /// No auth required (read-only view).
+    ///
+    /// # Panics
+    /// - `Error::ActionNotFound` if the action doesn't exist (or was executed)
+    pub fn get_admin_action(env: Env, action_id: u64) -> AdminAction {
+        storage::get_admin_action(&env, action_id)
+            .unwrap_or_else(|| panic_with_error(&env, Error::ActionNotFound))
+    }
+
+    /// Issue #92 – Number of admin actions ever proposed.
+    /// No auth required (read-only view).
+    pub fn get_admin_action_count(env: Env) -> u64 {
+        storage::get_admin_action_count(&env)
     }
 
     /// Issue #175 – assert the current invoker is the campaign creator.
@@ -801,6 +877,7 @@ fn panic_with_error(env: &Env, error: Error) -> ! {
 
 #[cfg(test)]
 mod test {
+    pub mod admin_action_tests;
     pub mod bump_storage_tests;
     pub mod claim_refund_tests;
     pub mod get_campaign_status_tests;
