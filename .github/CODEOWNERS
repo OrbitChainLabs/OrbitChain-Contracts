@@ -1,0 +1,43 @@
+# CODEOWNERS — Crate-level ownership for the OrbitChain-Contracts workspace.
+#
+# Issue #126 — Every top-level directory is mapped to at least one team so PRs
+# are automatically assigned for review. GitHub branch protection on `main`
+# should require a CODEOWNERS review before merge.
+#
+# Syntax: <path>  @org/team [@org/team …]
+# The last matching pattern wins; put the most specific patterns last.
+
+# ── Global fallback ───────────────────────────────────────────────────────────
+*                                      @OrbitChainLabs/maintainers
+
+# ── Smart contracts ───────────────────────────────────────────────────────────
+/campaign/                             @OrbitChainLabs/contracts
+/common/                               @OrbitChainLabs/contracts
+
+# ── Legacy / reference contracts ──────────────────────────────────────────────
+/crates/contracts/                     @OrbitChainLabs/contracts
+
+# ── Native tooling ────────────────────────────────────────────────────────────
+/crates/tools/                         @OrbitChainLabs/tooling
+/crates/testkit/                       @OrbitChainLabs/contracts @OrbitChainLabs/tooling
+
+# ── Token bridge ──────────────────────────────────────────────────────────────
+/token-bridge/                         @OrbitChainLabs/contracts
+
+# ── Fuzz testing ──────────────────────────────────────────────────────────────
+/fuzz/                                 @OrbitChainLabs/contracts
+
+# ── CI / CD / governance ──────────────────────────────────────────────────────
+/.github/                              @OrbitChainLabs/maintainers
+/.github/workflows/                    @OrbitChainLabs/maintainers
+/.github/CODEOWNERS                    @OrbitChainLabs/maintainers
+
+# ── Documentation ─────────────────────────────────────────────────────────────
+/docs/                                 @OrbitChainLabs/maintainers
+*.md                                   @OrbitChainLabs/maintainers
+
+# ── Deployment & E2E ──────────────────────────────────────────────────────────
+/deployments/                          @OrbitChainLabs/contracts
+/scripts/                              @OrbitChainLabs/tooling
+/e2e/                                  @OrbitChainLabs/contracts
+/tests/                                @OrbitChainLabs/contracts
