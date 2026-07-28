@@ -120,6 +120,33 @@ jobs:
       - name: cargo check --target wasm32v1-none (contracts)
         run: cargo check ${{ env.CONTRACTS }} --target wasm32v1-none
 
+  # ── Benchmarks — issue #111 ────────────────────────────────────────────────
+  # Criterion micro-benchmarks for hot paths (donate, release_milestone,
+  # claim_refund). On push to main the baseline is saved; on PRs it is
+  # compared. Criterion fails the job (>1 exit) if any benchmark regresses
+  # by more than the configured noise threshold.
+  bench:
+    name: Benchmarks (hot paths)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          cache: false
+      - name: Cache cargo registry and target
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - name: cargo bench (campaign)
+        run: |
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
+            cargo bench -p orbitchain-campaign -- --save-baseline main
+          else
+            cargo bench -p orbitchain-campaign -- --baseline main
+          fi
+
   mobile-wallet-e2e:
     name: Mobile wallet deep-link (Playwright)
     runs-on: ubuntu-latest
