@@ -1,5 +1,10 @@
 # Contract Event Schemas
 
+> **Issue #98 — Migration Notice:** Events are now emitted with BOTH the old
+> string-based topics documented below AND new `#[contractevent]` hashed topics.
+> See [`docs/events.generated.md`](events.generated.md) for the new topic format
+> and migration timeline.
+
 All events are emitted via `env.events().publish(topics, data)` and are filterable through Stellar Horizon's event streaming API.
 
 ---
