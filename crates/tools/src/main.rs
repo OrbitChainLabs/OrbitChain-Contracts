@@ -27,6 +27,7 @@ use orbitchain_tools::deploy;
 use orbitchain_tools::encrypted_vault::EncryptedVault;
 use orbitchain_tools::environment_config::EnvironmentConfig;
 use orbitchain_tools::error_mapper::ErrorMapper;
+use orbitchain_tools::indexer;
 use orbitchain_tools::invoke;
 use orbitchain_tools::key_manager::KeyManager;
 use orbitchain_tools::keypair_manager::{AccountFunding, DistributionAccount, MasterKeypair};
@@ -161,6 +162,7 @@ fn dispatch(command: &str, args: &[String]) -> Result<()> {
         "signing" => handle_signing(&args[2..]),
         "response" => handle_response(&args[2..]),
         "errors" => handle_errors(&args[2..]),
+        "indexer" => handle_indexer(&args[2..]),
         _ => {
             println!("❌ Unknown command: {}", command);
             println!();
@@ -195,6 +197,7 @@ fn print_available_commands() {
     println!("  keypair <cmd>         - Master/distribution keypair lifecycle");
     println!("  signing <cmd>         - Build donation/campaign/custom signing requests");
     println!("  response <cmd>        - Process/validate/save signed wallet responses");
+    println!("  indexer run           - Stream Soroban contract events (stdout or webhook)");
     println!("  deploy [net] [--wasm P] [--force] - Deploy the core contract (Rust mirror of scripts/deploy.sh)");
     println!("  invoke                - Invoke a contract method (wraps `stellar contract invoke`");
     println!("                          with vault-backed key resolution)");
@@ -1019,6 +1022,180 @@ fn handle_errors(args: &[String]) -> Result<()> {
     }
 
     Ok(())
+}
+
+// ─── Indexer (issue #145) ────────────────────────────────────────────────────
+
+/// `orbitchain-cli indexer run --network <net> [--webhook <url>] ...`
+///
+/// The rest of the CLI is synchronous, so the async runtime is created here
+/// rather than hoisting `#[tokio::main]` onto `main` and forcing every other
+/// sub-command through it.
+fn handle_indexer(args: &[String]) -> Result<()> {
+    if args.is_empty() || args[0] != "run" {
+        print_indexer_usage();
+        return Ok(());
+    }
+
+    let opts = parse_indexer_args(&args[1..])?;
+
+    let config = EnvironmentConfig::from_env()?;
+    let network = opts.network.unwrap_or(config.network.clone());
+    let rpc_url = match network.as_str() {
+        "testnet" => config.testnet.rpc_url.clone(),
+        "mainnet" | "public" => config.mainnet.rpc_url.clone(),
+        other => anyhow::bail!("Unknown network '{other}'. Use 'testnet' or 'mainnet'."),
+    };
+
+    let source = std::sync::Arc::new(indexer::RpcEventSource::new(
+        rpc_url.clone(),
+        opts.start_ledger,
+        opts.contract_ids.clone(),
+    )?);
+
+    let sink: std::sync::Arc<dyn indexer::EventSink> = match &opts.webhook {
+        Some(url) => std::sync::Arc::new(indexer::WebhookSink::new(url.clone())?),
+        None => std::sync::Arc::new(indexer::StdoutSink),
+    };
+
+    let cfg = indexer::IndexerConfig {
+        network: network.clone(),
+        batch_size: opts.batch_size,
+        ..Default::default()
+    };
+    let metrics = std::sync::Arc::new(indexer::Metrics::default());
+
+    println!("📡 OrbitChain Event Indexer");
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    println!("Network:   {network}");
+    println!("RPC:       {rpc_url}");
+    println!("Sink:      {}", sink.name());
+    println!("Batch:     {} events", cfg.batch_size);
+    println!("From:      ledger {}", opts.start_ledger);
+    if opts.contract_ids.is_empty() {
+        println!("Filter:    all contracts");
+    } else {
+        println!("Filter:    {} contract(s)", opts.contract_ids.len());
+    }
+    println!("Ctrl-C to stop.");
+    println!();
+
+    let runtime = tokio::runtime::Runtime::new().context("starting the indexer runtime")?;
+    let metrics_for_report = std::sync::Arc::clone(&metrics);
+
+    let result = runtime.block_on(async move {
+        tokio::select! {
+            r = indexer::run(source, sink, cfg, metrics) => r.map(Some),
+            _ = tokio::signal::ctrl_c() => {
+                println!("\n⏹  Interrupted — stopping.");
+                Ok(None)
+            }
+        }
+    });
+
+    let (fetched, delivered, batches, retries) = metrics_for_report.snapshot();
+    println!();
+    println!("Events fetched:   {fetched}");
+    println!("Events delivered: {delivered}");
+    println!("Batches:          {batches}");
+    println!("Retries:          {retries}");
+
+    match result? {
+        Some(cursor) => {
+            if let Some(token) = cursor.paging_token {
+                println!("Resume cursor:    {token} (ledger {})", cursor.ledger);
+            }
+        }
+        None => println!("Stopped before the source drained."),
+    }
+
+    Ok(())
+}
+
+/// Parsed `indexer run` flags.
+struct IndexerOpts {
+    network: Option<String>,
+    webhook: Option<String>,
+    start_ledger: u32,
+    batch_size: usize,
+    contract_ids: Vec<String>,
+}
+
+fn parse_indexer_args(args: &[String]) -> Result<IndexerOpts> {
+    let mut opts = IndexerOpts {
+        network: None,
+        webhook: None,
+        start_ledger: 0,
+        batch_size: indexer::DEFAULT_BATCH_SIZE,
+        contract_ids: Vec::new(),
+    };
+
+    let mut i = 0;
+    while i < args.len() {
+        // `--flag=value` and `--flag value` are both accepted; the rest of the
+        // CLI parses argv by hand, so there is no clap to lean on here.
+        let (flag, inline) = match args[i].split_once('=') {
+            Some((f, v)) => (f.to_string(), Some(v.to_string())),
+            None => (args[i].clone(), None),
+        };
+
+        let mut take_value = |name: &str| -> Result<String> {
+            if let Some(v) = inline.clone() {
+                return Ok(v);
+            }
+            i += 1;
+            args.get(i)
+                .cloned()
+                .ok_or_else(|| anyhow!("{name} requires a value"))
+        };
+
+        match flag.as_str() {
+            "--network" | "-n" => opts.network = Some(take_value("--network")?),
+            "--webhook" | "-w" => opts.webhook = Some(take_value("--webhook")?),
+            "--start-ledger" => {
+                opts.start_ledger = take_value("--start-ledger")?
+                    .parse()
+                    .context("--start-ledger must be a ledger number")?
+            }
+            "--batch-size" => {
+                let n: usize = take_value("--batch-size")?
+                    .parse()
+                    .context("--batch-size must be a positive integer")?;
+                if n == 0 {
+                    anyhow::bail!("--batch-size must be greater than zero");
+                }
+                opts.batch_size = n;
+            }
+            "--contract" | "-c" => opts.contract_ids.push(take_value("--contract")?),
+            "--help" | "-h" => {
+                print_indexer_usage();
+                std::process::exit(0);
+            }
+            other => anyhow::bail!("Unknown indexer flag '{other}'. See `indexer` for usage."),
+        }
+        i += 1;
+    }
+
+    Ok(opts)
+}
+
+fn print_indexer_usage() {
+    println!("📡 Indexer Commands");
+    println!("━━━━━━━━━━━━━━━━━━━");
+    println!("Usage: orbitchain-cli indexer run [flags]");
+    println!();
+    println!("Streams Soroban contract events and pushes them to a sink.");
+    println!();
+    println!("Flags:");
+    println!("  --network, -n <net>     testnet | mainnet (default: SOROBAN_NETWORK)");
+    println!("  --webhook, -w <url>     POST batches here (default: stdout, JSON lines)");
+    println!("  --contract, -c <id>     Only index this contract (repeatable)");
+    println!("  --start-ledger <n>      First ledger to index (default: 0)");
+    println!("  --batch-size <n>        Events per delivery (default: 100)");
+    println!();
+    println!("Examples:");
+    println!("  orbitchain-cli indexer run --network testnet");
+    println!("  orbitchain-cli indexer run -n testnet -w https://example.com/hook -c CABC…");
 }
 
 #[cfg(test)]
