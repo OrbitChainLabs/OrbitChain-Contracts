@@ -116,6 +116,16 @@ pub enum Error {
     // ── Asset block ───────────────────────────────────────────────────── 9x
     /// Donations in this asset are blocked by the admin.
     AssetBlocked = 90,
+
+    // Codes 91–93 are reserved by the in-flight donation-receipt work (#158);
+    // 94–102 by the in-flight timelock + multi-sig admin work (#92).
+
+    // ── Freeze grace window (issue #95) ───────────────────────────────── 10x
+    /// `unfreeze()` called before the grace window since the last freeze-state
+    /// change has elapsed.
+    UnfreezeTooEarly = 103,
+    /// The supplied unfreeze delay exceeds `MAX_UNFREEZE_DELAY`.
+    InvalidUnfreezeDelay = 104,
 }
 
 #[cfg(test)]
@@ -167,6 +177,8 @@ mod error_code_tests {
             Error::InvalidAmount as u32,
             Error::ContractFrozen as u32,
             Error::AssetBlocked as u32,
+            Error::UnfreezeTooEarly as u32,
+            Error::InvalidUnfreezeDelay as u32,
         ];
         for (index, code) in campaign_codes.iter().enumerate() {
             assert!(!campaign_codes[index + 1..].contains(code));
@@ -324,6 +336,15 @@ pub enum DataKey {
     /// clients read one entry instead of recomputing from campaign +
     /// milestones + counters on every call.
     CachedReport,
+
+    // ── Persistent (appended — issue #95) ───────────────────────────────────
+    /// Ledger timestamp of the most recent freeze-state change. Absent means
+    /// the freeze flag has never been set.
+    FrozenAt,
+    /// Configured grace window, in seconds, that must elapse after a
+    /// freeze-state change before `unfreeze()` is permitted. Absent means the
+    /// `DEFAULT_MIN_UNFREEZE_DELAY` default applies.
+    MinUnfreezeDelay,
 }
 
 // ─── Asset types ──────────────────────────────────────────────────────────────

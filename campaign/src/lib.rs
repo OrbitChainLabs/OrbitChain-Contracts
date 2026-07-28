@@ -42,12 +42,13 @@ pub mod views;
 use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, Vec};
 use storage::{
     acquire_lock, block_asset, bump_all_persistent, get_cached_report_storage, get_campaign,
-    get_donor, get_donor_asset_donation, get_milestone, increment_donor_asset_donation,
-    is_asset_blocked, is_frozen, release_lock, set_campaign, set_donor, set_frozen, set_milestone,
-    storage_get_donation_count, storage_get_release_count, storage_get_total_raised,
-    storage_get_unique_donor_count, storage_increment_asset_raised,
-    storage_increment_donation_count, storage_increment_unique_donor_count,
-    storage_set_total_raised, unblock_asset, unlock_milestones_batch,
+    get_donor, get_donor_asset_donation, get_frozen_at, get_milestone, get_min_unfreeze_delay,
+    increment_donor_asset_donation, is_asset_blocked, is_frozen, release_lock, set_campaign,
+    set_donor, set_frozen, set_milestone, set_min_unfreeze_delay, storage_get_donation_count,
+    storage_get_release_count, storage_get_total_raised, storage_get_unique_donor_count,
+    storage_increment_asset_raised, storage_increment_donation_count,
+    storage_increment_unique_donor_count, storage_set_total_raised, unblock_asset,
+    unlock_milestones_batch,
 };
 
 use types::{
@@ -83,6 +84,21 @@ pub use common::version::{
 /// Capping extensions at ten years keeps deadline arithmetic meaningful for
 /// views, refund windows, milestone release metadata, and downstream reports.
 pub const MAX_DEADLINE_GAP_SECONDS: u64 = 10 * 365 * 24 * 60 * 60;
+
+/// Issue #95 – Default grace window between a freeze-state change and a
+/// permitted `unfreeze()`, in seconds (one hour).
+///
+/// A compromised admin key would otherwise be able to `unfreeze()` in the very
+/// next transaction after a legitimate emergency `freeze()`, defeating incident
+/// response. Holding the freeze for a fixed minimum gives responders a window
+/// that a stolen key cannot shorten.
+pub const DEFAULT_MIN_UNFREEZE_DELAY: u64 = 60 * 60;
+
+/// Issue #95 – Upper bound for a configured un-freeze grace window (30 days).
+///
+/// Bounded so a mis-set delay cannot brick `unfreeze()` for an unreasonable
+/// span; the freeze flag blocks every mutating entrypoint while it is set.
+pub const MAX_UNFREEZE_DELAY: u64 = 30 * 24 * 60 * 60;
 
 #[contract]
 pub struct CampaignContract;
@@ -719,10 +735,60 @@ impl CampaignContract {
 
         campaign.creator.require_auth();
 
+        // Issue #95 – Grace window: the freeze must have stood for at least
+        // the configured delay. A stolen admin key therefore cannot undo an
+        // emergency freeze in the following transaction.
+        let timestamp = env.ledger().timestamp();
+        let unlock_at = get_frozen_at(&env).saturating_add(get_min_unfreeze_delay(&env));
+        if timestamp < unlock_at {
+            panic_with_error(&env, Error::UnfreezeTooEarly);
+        }
+
         set_frozen(&env, false);
 
-        let timestamp = env.ledger().timestamp();
         event::contract_unfrozen(&env, &campaign.creator, timestamp);
+    }
+
+    /// Issue #95 – Configure the un-freeze grace window, in seconds.
+    ///
+    /// Only the admin (creator) can call this. The window is measured from the
+    /// most recent freeze-state change; see `DEFAULT_MIN_UNFREEZE_DELAY`.
+    ///
+    /// Deliberately callable while frozen: the window is a safety parameter for
+    /// incident response, and locking it behind the freeze flag would make it
+    /// unadjustable exactly when it matters. It cannot shorten an in-flight
+    /// window below what has already elapsed for a caller who lacks the
+    /// creator key, and lengthening it only ever delays `unfreeze()` further.
+    ///
+    /// # Panics
+    /// - `Error::NotInitialized` if campaign not yet initialized
+    /// - `Error::InvalidUnfreezeDelay` if `delay > MAX_UNFREEZE_DELAY`
+    pub fn set_unfreeze_delay(env: Env, delay: u64) {
+        let campaign =
+            get_campaign(&env).unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
+
+        campaign.creator.require_auth();
+
+        if delay > MAX_UNFREEZE_DELAY {
+            panic_with_error(&env, Error::InvalidUnfreezeDelay);
+        }
+
+        set_min_unfreeze_delay(&env, delay);
+
+        event::unfreeze_delay_updated(&env, &campaign.creator, delay);
+    }
+
+    /// Issue #95 – The configured un-freeze grace window in seconds.
+    /// No auth required (read-only view).
+    pub fn get_unfreeze_delay(env: Env) -> u64 {
+        get_min_unfreeze_delay(&env)
+    }
+
+    /// Issue #95 – Ledger timestamp of the last freeze-state change, or 0 if
+    /// the freeze flag has never been set.
+    /// No auth required (read-only view).
+    pub fn get_frozen_at(env: Env) -> u64 {
+        storage::get_frozen_at(&env)
     }
 
     /// Issue #175 – assert the current invoker is the campaign creator.
@@ -803,6 +869,7 @@ fn panic_with_error(env: &Env, error: Error) -> ! {
 mod test {
     pub mod bump_storage_tests;
     pub mod claim_refund_tests;
+    pub mod freeze_grace_tests;
     pub mod get_campaign_status_tests;
     pub mod integration_tests;
     pub mod invariant_tests;

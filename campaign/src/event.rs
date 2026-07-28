@@ -112,3 +112,9 @@ pub fn asset_unblocked(env: &Env, admin: &Address, asset: &Address, timestamp: u
     env.events()
         .publish(("campaign", "asset_unblocked"), (admin, asset, timestamp));
 }
+
+/// Issue #95 – Emitted when the admin changes the un-freeze grace window.
+pub fn unfreeze_delay_updated(env: &Env, admin: &Address, delay: u64) {
+    env.events()
+        .publish(("campaign", "unfreeze_delay_updated"), (admin, delay));
+}

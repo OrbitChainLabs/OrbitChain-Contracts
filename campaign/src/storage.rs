@@ -455,9 +455,45 @@ pub fn is_frozen(env: &Env) -> bool {
 }
 
 /// Set the contract freeze flag.
+///
+/// Issue #95 – Every freeze-state change stamps `DataKey::FrozenAt` with the
+/// current ledger timestamp, which is what the un-freeze grace window is
+/// measured from. Stamping here (rather than at the call sites) means any
+/// future path that flips the flag inherits the window automatically.
 pub fn set_frozen(env: &Env, frozen: bool) {
     let key = DataKey::Frozen;
     env.storage().persistent().set(&key, &frozen);
+    bump_persistent(env, &key);
+
+    let at_key = DataKey::FrozenAt;
+    env.storage()
+        .persistent()
+        .set(&at_key, &env.ledger().timestamp());
+    bump_persistent(env, &at_key);
+}
+
+/// Issue #95 – Ledger timestamp of the last freeze-state change.
+/// Returns 0 if the freeze flag has never been set.
+pub fn get_frozen_at(env: &Env) -> u64 {
+    env.storage()
+        .persistent()
+        .get(&DataKey::FrozenAt)
+        .unwrap_or(0)
+}
+
+/// Issue #95 – The configured un-freeze grace window in seconds, falling back
+/// to `DEFAULT_MIN_UNFREEZE_DELAY` when none has been set.
+pub fn get_min_unfreeze_delay(env: &Env) -> u64 {
+    env.storage()
+        .persistent()
+        .get(&DataKey::MinUnfreezeDelay)
+        .unwrap_or(crate::DEFAULT_MIN_UNFREEZE_DELAY)
+}
+
+/// Issue #95 – Configure the un-freeze grace window (seconds).
+pub fn set_min_unfreeze_delay(env: &Env, delay: u64) {
+    let key = DataKey::MinUnfreezeDelay;
+    env.storage().persistent().set(&key, &delay);
     bump_persistent(env, &key);
 }
 
@@ -534,6 +570,15 @@ pub fn bump_all_persistent(env: &Env, milestone_count: u32) {
     let report_key = DataKey::CachedReport;
     if env.storage().persistent().has(&report_key) {
         bump_persistent(env, &report_key);
+    }
+    // Issue #95 – freeze grace-window keys.
+    let frozen_at_key = DataKey::FrozenAt;
+    if env.storage().persistent().has(&frozen_at_key) {
+        bump_persistent(env, &frozen_at_key);
+    }
+    let delay_key = DataKey::MinUnfreezeDelay;
+    if env.storage().persistent().has(&delay_key) {
+        bump_persistent(env, &delay_key);
     }
     // Legacy per-index entries (pre-#118 layouts, not yet migrated).
     for i in 0..milestone_count {

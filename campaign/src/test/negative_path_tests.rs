@@ -965,6 +965,11 @@ fn test_upgrade_succeeds_after_unfreeze() {
         initialize_default_campaign(&env);
         CampaignContract::freeze(env.clone());
         assert!(crate::storage::is_frozen(&env), "Contract should be frozen");
+        // Issue #95 – `unfreeze()` now requires the freeze to have stood for
+        // the grace window. This test is about unfreeze clearing the flag, not
+        // about it being instantaneous, so advance past the window first.
+        env.ledger()
+            .set_timestamp(env.ledger().timestamp() + crate::DEFAULT_MIN_UNFREEZE_DELAY);
         CampaignContract::unfreeze(env.clone());
         assert!(
             !crate::storage::is_frozen(&env),
