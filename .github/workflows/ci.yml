@@ -120,6 +120,35 @@ jobs:
       - name: cargo check --target wasm32v1-none (contracts)
         run: cargo check ${{ env.CONTRACTS }} --target wasm32v1-none
 
+  wasm-size:
+    name: WASM size budget + optimized-binary exec gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain with wasm target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32v1-none
+          cache: false
+      - name: Cache cargo registry and target
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - name: Install binaryen (wasm-opt) — pinned to the budget baseline
+        # Budgets in scripts/wasm_size_check.sh were measured with binaryen
+        # 130; distro packages lag and older wasm-opt produces measurably
+        # larger output (apt's binaryen exceeded every budget by ~5-15%).
+        run: |
+          curl -sSL https://github.com/WebAssembly/binaryen/releases/download/version_130/binaryen-version_130-x86_64-linux.tar.gz | tar xz
+          echo "$PWD/binaryen-version_130/bin" >> "$GITHUB_PATH" 
+      - name: Optimize WASM (-Oz) and enforce size budgets
+        run: make optimize && bash scripts/wasm_size_check.sh
+      - name: Execute optimized campaign wasm in the Soroban host VM
+        run: |
+          OPTIMIZED_WASM=$PWD/target/wasm32v1-none/release/orbitchain_campaign.optimized.wasm \
+            cargo test -p orbitchain-campaign --test optimized_wasm_exec
+
   mobile-wallet-e2e:
     name: Mobile wallet deep-link (Playwright)
     runs-on: ubuntu-latest

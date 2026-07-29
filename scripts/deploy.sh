@@ -45,7 +45,7 @@ esac
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 WASM_PATH="target/wasm32v1-none/release/orbitchain_core.wasm"
-OPTIMIZED_WASM_PATH="target/wasm32v1-none/release/orbitchain_core.wasm"
+OPTIMIZED_WASM_PATH="target/wasm32v1-none/release/orbitchain_core.optimized.wasm"
 DEPLOYMENTS_DIR="deployments"
 DEPLOYMENT_FILE="${DEPLOYMENTS_DIR}/${NETWORK}.json"
 
