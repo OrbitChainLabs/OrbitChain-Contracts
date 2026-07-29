@@ -60,6 +60,8 @@ fn create_test_campaign(env: &Env, creator: &Address, milestone_count: u32) {
         created_at_ledger: env.ledger().sequence(),
         created_at_time: env.ledger().timestamp(),
         concluded_at_ledger: None,
+        max_donations_per_donor: None,
+        min_donation_interval_seconds: None,
     };
     set_campaign(env, &campaign);
 }
@@ -150,6 +152,8 @@ fn create_multi_asset_campaign_with_funding(
         created_at_ledger: env.ledger().sequence(),
         created_at_time: env.ledger().timestamp(),
         concluded_at_ledger: None,
+        max_donations_per_donor: None,
+        min_donation_interval_seconds: None,
     };
     set_campaign(env, &campaign);
 

@@ -46,7 +46,7 @@ fn setup_campaign(env: &Env, goal: i128, milestone_count: usize) {
     let end_time = BASE + 86_400;
     let targets = compute_milestone_targets(goal, milestone_count);
     let milestones = make_milestones(env, &targets);
-    CampaignContract::initialize(env.clone(), creator, goal, end_time, assets, milestones, 0)
+    CampaignContract::initialize(env.clone(), creator, goal, end_time, assets, milestones, 0, None, None)
         .unwrap();
 }
 
@@ -76,7 +76,7 @@ proptest! {
                 assets,
                 milestones,
                 0,
-            );
+            None, None);
             assert!(result.is_ok(), "initialize should succeed");
 
             let campaign = orbitchain_campaign::storage::get_campaign(&env).unwrap();
@@ -335,7 +335,7 @@ proptest! {
                 assets,
                 milestones,
                 0,
-            )
+            None, None)
             .unwrap();
 
             for amount in &amounts {
@@ -512,7 +512,7 @@ proptest! {
                 assets,
                 milestones,
                 0,
-            )
+            None, None)
             .unwrap();
 
             let mut donors: std::vec::Vec<Address> = std::vec::Vec::new();
@@ -700,7 +700,7 @@ proptest! {
                 assets,
                 milestones,
                 0,
-            )
+            None, None)
             .unwrap();
 
             let new_end_time = env.ledger().timestamp() + extension;
@@ -738,7 +738,7 @@ proptest! {
                 assets,
                 milestones,
                 0,
-            )
+            None, None)
             .unwrap();
 
             let mut donors: std::vec::Vec<Address> = std::vec::Vec::new();

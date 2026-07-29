@@ -299,6 +299,8 @@ mod tests {
             created_at_ledger: 0,
             created_at_time: 0,
             concluded_at_ledger: None,
+            max_donations_per_donor: None,
+            min_donation_interval_seconds: None,
         };
         set_campaign(&env, &campaign);
 

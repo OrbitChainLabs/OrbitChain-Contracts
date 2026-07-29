@@ -8,6 +8,7 @@ use crate::storage::{get_campaign, is_frozen, set_campaign};
 use crate::types::{CampaignStatus, Error};
 use crate::validation::validate_campaign_transition;
 use crate::MAX_DEADLINE_GAP_SECONDS;
+
 use soroban_sdk::{panic_with_error, Env};
 
 /// Issue #212 – End the campaign early (before deadline).

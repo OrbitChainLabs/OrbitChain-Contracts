@@ -29,6 +29,7 @@ env:
   CONTRACTS: >-
     -p orbitchain-campaign
     -p orbitchain-common
+    -p orbitchain-batch-donor
     -p orbitchain-core
     -p orbitchain-token-bridge
   # Coverage floor (line coverage, percent) — the value issue #114 asks for.

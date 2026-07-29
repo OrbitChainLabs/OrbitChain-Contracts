@@ -67,6 +67,6 @@ fuzz_target!(|input: InitializeFuzzInput| {
             assets,
             milestones,
             min_donation,
-        );
+        None, None);
     });
 });

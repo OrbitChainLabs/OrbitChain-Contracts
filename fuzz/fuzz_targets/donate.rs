@@ -75,7 +75,7 @@ fuzz_target!(|input: DonateFuzzInput| {
             assets,
             milestones,
             min_donation,
-        );
+        None, None);
     });
 
     let safe_amount = input.donation_amount.abs().max(1);

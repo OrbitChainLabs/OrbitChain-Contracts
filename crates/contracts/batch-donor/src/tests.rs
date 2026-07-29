@@ -115,7 +115,7 @@ fn oversized_batch_panics_with_validation_code() {
 
 #[test]
 fn batch_donate_result_struct_has_expected_shape() {
-    let env = Env::default();
+    let _env = Env::default();
     let result = BatchDonateResult {
         index: 7,
         outcome: BatchDonateOutcome::ValidationFailed(42),

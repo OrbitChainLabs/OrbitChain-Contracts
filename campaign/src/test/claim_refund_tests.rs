@@ -5,11 +5,9 @@
 
 #![cfg(test)]
 
-use core::ops::Add;
-
 use soroban_sdk::testutils::{Address as AddressTestUtils, Ledger};
 use soroban_sdk::token::{StellarAssetClient, TokenClient};
-use soroban_sdk::{log, vec, Address, Env, Vec};
+use soroban_sdk::{vec, Address, Env, Vec};
 
 use super::with_contract;
 use crate::storage::{set_campaign, set_donor, set_milestone};
@@ -61,6 +59,8 @@ fn create_test_campaign(
         created_at_ledger: 0,
         created_at_time: 0,
         concluded_at_ledger: None,
+        max_donations_per_donor: None,
+        min_donation_interval_seconds: None,
     };
     set_campaign(env, &campaign);
     campaign
@@ -172,6 +172,8 @@ fn test_claim_refund_refund_amount_overflow() {
             created_at_ledger: 0,
             created_at_time: 0,
             concluded_at_ledger: None,
+            max_donations_per_donor: None,
+            min_donation_interval_seconds: None,
         };
         set_campaign(&env, &campaign);
         create_test_milestone(&env, 0, 1000, MilestoneStatus::Locked);
@@ -216,6 +218,8 @@ fn test_claim_refund_zero_denominator() {
             created_at_ledger: 0,
             created_at_time: 0,
             concluded_at_ledger: None,
+            max_donations_per_donor: None,
+            min_donation_interval_seconds: None,
         };
         set_campaign(&env, &campaign);
         create_test_milestone(&env, 0, 1000, MilestoneStatus::Locked);
@@ -505,6 +509,8 @@ fn test_claim_refund_ended_donor_100() {
         &accepted_assets,
         &milestones,
         &min_donation_amount,
+        &None,
+        &None,
     );
 
     client.donate(&donor, &100, &AssetInfo::Stellar(token_address.clone()));
@@ -568,6 +574,8 @@ fn test_claim_refund_ended_donor_1() {
         &accepted_assets,
         &milestones,
         &min_donation_amount,
+        &None,
+        &None,
     );
 
     client.donate(&donor, &1, &AssetInfo::Stellar(token_address.clone()));
@@ -625,6 +633,8 @@ fn test_claim_refund_ended_full_refund() {
         &accepted_assets,
         &milestones,
         &min_donation_amount,
+        &None,
+        &None,
     );
 
     client.donate(&donor, &1500, &AssetInfo::Stellar(token_address.clone()));

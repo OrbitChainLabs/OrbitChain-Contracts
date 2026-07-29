@@ -9,10 +9,7 @@ use soroban_sdk::{Address, BytesN, Env, String, Vec};
 
 use super::with_contract;
 use crate::storage::{get_campaign, get_milestone};
-use crate::types::{
-    AssetInfo, CampaignData, CampaignStatus, DonorRecord, MilestoneData, MilestoneStatus,
-    StellarAsset,
-};
+use crate::types::{AssetInfo, CampaignStatus, MilestoneData, MilestoneStatus, StellarAsset};
 use crate::CampaignContract;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -63,6 +60,8 @@ fn test_initialize_happy_path() {
             assets.clone(),
             milestones.clone(),
             0,
+            None,
+            None,
         );
 
         assert!(result.is_ok(), "Initialize should succeed");
@@ -93,8 +92,18 @@ fn test_extend_deadline_happy_path() {
         let end_time = env.ledger().timestamp() + 86_400;
         let new_end_time = env.ledger().timestamp() + (2 * 86_400);
 
-        CampaignContract::initialize(env.clone(), creator, 1000, end_time, assets, milestones, 0)
-            .unwrap();
+        CampaignContract::initialize(
+            env.clone(),
+            creator,
+            1000,
+            end_time,
+            assets,
+            milestones,
+            0,
+            None,
+            None,
+        )
+        .unwrap();
 
         CampaignContract::extend_deadline(env.clone(), new_end_time);
 
@@ -124,6 +133,8 @@ fn test_donate_happy_path() {
             assets.clone(),
             milestones.clone(),
             0,
+            None,
+            None,
         )
         .unwrap();
 
@@ -200,6 +211,8 @@ fn test_lifecycle_end_and_refund_eligibility() {
             assets.clone(),
             milestones.clone(),
             0,
+            None,
+            None,
         )
         .unwrap();
 
@@ -271,6 +284,8 @@ fn test_lifecycle_multi_milestone_unlock() {
             assets.clone(),
             milestones.clone(),
             0,
+            None,
+            None,
         )
         .unwrap();
 
@@ -408,6 +423,8 @@ fn test_campaign_analytics_report_and_summary() {
             assets.clone(),
             milestones.clone(),
             0,
+            None,
+            None,
         )
         .unwrap();
 
@@ -487,6 +504,8 @@ fn test_donate_below_minimum_panics_assert() {
             assets.clone(),
             milestones.clone(),
             100, // min donation is 100
+            None,
+            None,
         )
         .unwrap();
 

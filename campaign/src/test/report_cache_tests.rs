@@ -79,6 +79,8 @@ fn initialize_campaign(env: &Env, creator: &Address, token: &Address, goal: i128
         assets,
         milestones,
         0,
+        None,
+        None,
     )
     .unwrap();
 }
@@ -213,6 +215,8 @@ fn get_cached_report_falls_back_for_pre_cache_state() {
             created_at_ledger: env.ledger().sequence(),
             created_at_time: env.ledger().timestamp(),
             concluded_at_ledger: None,
+            max_donations_per_donor: None,
+            min_donation_interval_seconds: None,
         };
         set_campaign(&env, &campaign);
         let _ = set_milestone; // (helper imported for parity with sibling tests)

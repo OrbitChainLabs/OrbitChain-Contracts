@@ -26,6 +26,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - uses: actions/checkout@v4
+        with:
+          # Check out the PR head so labeler reads .github/labeler.yml from the
+          # PR branch (where the v5-format config lives), not the base branch.
+          ref: ${{ github.event.pull_request.head.sha }}
       - name: Apply labels
         uses: actions/labeler@v5
         with:

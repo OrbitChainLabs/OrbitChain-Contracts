@@ -116,6 +116,13 @@ pub enum Error {
     // ── Asset block ───────────────────────────────────────────────────── 9x
     /// Donations in this asset are blocked by the admin.
     AssetBlocked = 90,
+
+    // ── Rate limiting / dust-attack protection ─────────────────────── 10x (issue #91)
+    /// Donor has exceeded the maximum number of donations allowed for this
+    /// campaign (`max_donations_per_donor`) or the global
+    /// `MAX_DONATIONS_PER_BLOCK` burst cap.  Wait for the next ledger or
+    /// check `min_donation_interval_seconds` before retrying.
+    DonationRateLimited = 100,
 }
 
 #[cfg(test)]
@@ -167,6 +174,7 @@ mod error_code_tests {
             Error::InvalidAmount as u32,
             Error::ContractFrozen as u32,
             Error::AssetBlocked as u32,
+            Error::DonationRateLimited as u32,
         ];
         for (index, code) in campaign_codes.iter().enumerate() {
             assert!(!campaign_codes[index + 1..].contains(code));
@@ -420,6 +428,23 @@ pub struct CampaignData {
     /// Ledger number at which the campaign entered its terminal state,
     /// if it has done so.
     pub concluded_at_ledger: Option<u32>,
+
+    // ── Rate limiting / dust-attack protection (issue #91) ────────────────
+    /// Optional cap on the total lifetime donation count per donor address.
+    ///
+    /// When `Some(n)`, a donor whose `donation_count` has already reached `n`
+    /// is rejected with `Error::DonationRateLimited`.  `None` (the default)
+    /// preserves the previous unlimited behaviour.
+    pub max_donations_per_donor: Option<u32>,
+
+    /// Optional minimum interval (in seconds) that must elapse between
+    /// consecutive donations from the same address.
+    ///
+    /// When `Some(s)`, a donation is rejected with `Error::DonationRateLimited`
+    /// if `current_timestamp - donor.last_donation_time < s`.  The first
+    /// donation from an address always succeeds (last_donation_time == 0).
+    /// `None` (the default) preserves the previous unrestricted behaviour.
+    pub min_donation_interval_seconds: Option<u64>,
 }
 
 impl CampaignData {

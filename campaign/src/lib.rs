@@ -70,6 +70,18 @@ pub const VERSION: u32 = 1;
 /// Refunds are only permitted within this window after campaign end or cancellation.
 pub const REFUND_WINDOW: u64 = 30 * 24 * 60 * 60;
 
+/// Issue #91 — per-block burst cap: maximum number of donation calls accepted
+/// from a single donor address within one Soroban ledger sequence number.
+///
+/// Soroban executes at most one transaction per ledger per account (enforced by
+/// sequence numbers), so this cap is an additional guard against multi-sender
+/// dust spam in the same ledger.  Set to `10` as a conservative default that
+/// allows burst funding while blocking adversarial micro-donation floods.
+///
+/// This constant applies globally to every campaign regardless of the
+/// per-campaign `max_donations_per_donor` setting.
+pub const MAX_DONATIONS_PER_BLOCK: u32 = 10;
+
 // Re-export the workspace semver constants so the campaign contract exposes
 // them through its own `pub use` surface.  The legacy `VERSION: u32` constant
 // above is preserved for backwards compatibility with pre-0.2 callers — new
@@ -94,6 +106,12 @@ impl CampaignContract {
     /// Requires: Creator authorization via `creator.require_auth()`
     /// Can only be called once per contract instance
     ///
+    /// Issue #91 — Rate limiting / dust-attack protection:
+    /// - `max_donations_per_donor`: optional lifetime cap on donations per donor
+    ///   address. Pass `None` to preserve the unrestricted default.
+    /// - `min_donation_interval_seconds`: optional cooldown between consecutive
+    ///   donations from the same address. Pass `None` to disable.
+    ///
     /// # Panics
     /// - `Error::Unauthorized`   if caller is not the creator
     /// - `Error::AlreadyInitialized`    if campaign already exists
@@ -104,6 +122,9 @@ impl CampaignContract {
     /// - `Error::InvalidMilestoneCount` if milestone count is not 1-5
     /// - `Error::InvalidMilestones`     if milestones are not sorted ascending
     /// - `Error::MilestoneMismatch`     if last milestone.target_amount != goal_amount
+    /// `#[allow(clippy::too_many_arguments)]`: this is the public contract
+    /// entrypoint and cannot be refactored without a breaking API change.
+    #[allow(clippy::too_many_arguments)]
     pub fn initialize(
         env: Env,
         creator: soroban_sdk::Address,
@@ -112,6 +133,8 @@ impl CampaignContract {
         accepted_assets: Vec<StellarAsset>,
         milestones: Vec<MilestoneData>,
         min_donation_amount: i128,
+        max_donations_per_donor: Option<u32>,
+        min_donation_interval_seconds: Option<u64>,
     ) -> Result<(), Error> {
         creator.require_auth();
 
@@ -153,6 +176,8 @@ impl CampaignContract {
             created_at_ledger: env.ledger().sequence(),
             created_at_time: env.ledger().timestamp(),
             concluded_at_ledger: None,
+            max_donations_per_donor,
+            min_donation_interval_seconds,
         };
 
         set_campaign(&env, &campaign);
@@ -253,14 +278,51 @@ impl CampaignContract {
             panic_with_error(&env, Error::AssetBlocked);
         }
 
-        storage_increment_asset_raised(&env, &asset_address, amount);
-        increment_donor_asset_donation(&env, &donor, &asset_address, amount);
-
-        // Update donor record
+        // Issue #91 — Rate limiting / dust-attack protection.
+        // Load the donor record before any storage mutation so all three guards
+        // can inspect current state and reject the call without partial writes.
         let existing_donor = get_donor(&env, &donor);
         let is_new_donor = existing_donor.is_none();
         let mut donor_record =
             existing_donor.unwrap_or_else(|| DonorRecord::new_for(donor.clone(), asset.clone()));
+
+        // Guard 1: per-ledger burst cap (MAX_DONATIONS_PER_BLOCK).
+        // Soroban ledger sequence numbers increment every ~5 s; this prevents
+        // a single donor from submitting an unlimited burst of micro-donations
+        // in one ledger, which inflates gas costs for honest users and bloats
+        // the per-donor donation history.
+        if donor_record.last_donation_ledger == env.ledger().sequence()
+            && donor_record.donation_count >= MAX_DONATIONS_PER_BLOCK
+        {
+            panic_with_error(&env, Error::DonationRateLimited);
+        }
+
+        // Guard 2: configurable lifetime donation cap per donor.
+        // `None` (default) preserves the previous unlimited behaviour.
+        if let Some(max_per_donor) = campaign.max_donations_per_donor {
+            if donor_record.donation_count >= max_per_donor {
+                panic_with_error(&env, Error::DonationRateLimited);
+            }
+        }
+
+        // Guard 3: configurable minimum interval between donations.
+        // `None` (default) disables the interval check.
+        // `last_donation_time == 0` means first-ever donation and is always allowed.
+        if let Some(interval) = campaign.min_donation_interval_seconds {
+            if donor_record.last_donation_time > 0 {
+                let elapsed = env
+                    .ledger()
+                    .timestamp()
+                    .saturating_sub(donor_record.last_donation_time);
+                if elapsed < interval {
+                    panic_with_error(&env, Error::DonationRateLimited);
+                }
+            }
+        }
+
+        // All guards passed — now mutate storage.
+        storage_increment_asset_raised(&env, &asset_address, amount);
+        increment_donor_asset_donation(&env, &donor, &asset_address, amount);
 
         donor_record.apply_donation(
             &env,
@@ -808,6 +870,7 @@ mod test {
     pub mod invariant_tests;
     pub mod milestone_batch_tests;
     pub mod negative_path_tests;
+    pub mod rate_limiting_tests;
     pub mod refund_eligibility_tests;
     pub mod release_milestone_tests;
     pub mod report_cache_tests;

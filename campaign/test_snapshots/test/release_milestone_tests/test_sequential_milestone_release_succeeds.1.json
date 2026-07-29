@@ -243,6 +243,12 @@
                   },
                   {
                     "key": {
+                      "symbol": "max_donations_per_donor"
+                    },
+                    "val": "void"
+                  },
+                  {
+                    "key": {
                       "symbol": "milestone_count"
                     },
                     "val": {
@@ -256,6 +262,12 @@
                     "val": {
                       "i128": "0"
                     }
+                  },
+                  {
+                    "key": {
+                      "symbol": "min_donation_interval_seconds"
+                    },
+                    "val": "void"
                   },
                   {
                     "key": {

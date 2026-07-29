@@ -71,7 +71,7 @@ fuzz_target!(|input: ReleaseMilestoneFuzzInput| {
             assets,
             milestones,
             0,
-        );
+        None, None);
 
         token_sac.mint(&donor, &(donation_amount * 10));
         let _ = CampaignContract::donate(

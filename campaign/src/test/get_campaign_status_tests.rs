@@ -5,11 +5,11 @@
 #![cfg(test)]
 
 use soroban_sdk::testutils::{Address as AddressTestUtils, Ledger};
-use soroban_sdk::{Address, BytesN, Env, String, Vec};
+use soroban_sdk::{Address, Env, String, Vec};
 
 use super::with_contract;
 use crate::storage::set_campaign;
-use crate::types::{CampaignData, CampaignStatus, MilestoneData, MilestoneStatus, StellarAsset};
+use crate::types::{CampaignData, CampaignStatus, StellarAsset};
 use crate::CampaignContract;
 
 /// Base ledger timestamp (1 year in seconds) so we can safely subtract
@@ -41,6 +41,8 @@ fn setup_active_campaign(env: &Env) {
         created_at_ledger: env.ledger().sequence(),
         created_at_time: env.ledger().timestamp(),
         concluded_at_ledger: None,
+        max_donations_per_donor: None,
+        min_donation_interval_seconds: None,
     };
     set_campaign(env, &campaign);
 }
@@ -82,6 +84,8 @@ fn returns_ended_status() {
             created_at_ledger: env.ledger().sequence(),
             created_at_time: env.ledger().timestamp(),
             concluded_at_ledger: None,
+            max_donations_per_donor: None,
+            min_donation_interval_seconds: None,
         };
         set_campaign(&env, &campaign);
         let result = CampaignContract::get_campaign_status(env.clone());
@@ -114,6 +118,8 @@ fn returns_cancelled_status() {
             created_at_ledger: env.ledger().sequence(),
             created_at_time: env.ledger().timestamp(),
             concluded_at_ledger: None,
+            max_donations_per_donor: None,
+            min_donation_interval_seconds: None,
         };
         set_campaign(&env, &campaign);
         let result = CampaignContract::get_campaign_status(env.clone());
