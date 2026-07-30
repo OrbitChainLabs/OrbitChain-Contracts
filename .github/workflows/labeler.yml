@@ -26,6 +26,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - uses: actions/checkout@v4
+        with:
+          # Check out the PR head so the labeler reads the config from the
+          # PR branch, not the base branch.  This lets PRs ship their own
+          # labeler config migrations (e.g. v4 -> v5 schema).
+          ref: ${{ github.event.pull_request.head.sha }}
+
       - name: Apply labels
         uses: actions/labeler@v5
         with:
