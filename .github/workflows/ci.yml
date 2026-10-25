@@ -147,6 +147,12 @@ jobs:
           done
           bash scripts/smoke-test-sep10.sh
           kill "$(cat /tmp/sep10-server.pid)"
+      - name: wallet_connect unit tests
+        # node --test wallet_connect.test.js. Previously only run locally,
+        # which meant the static hardening assertions added in issue #141 —
+        # CSP directives, the pinned Freighter SRI hash, StrKey validation
+        # cross-checked against @stellar/stellar-sdk — could drift silently.
+        run: npm test
       - name: Playwright wallet_connect.html mobile-viewport tests
         run: npx playwright test
       - name: Upload Playwright report

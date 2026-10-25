@@ -4,142 +4,37 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="color-scheme" content="light dark" />
+  <!-- Content Security Policy (issue #141). `default-src 'none'` denies every
+       fetch type by default; each directive below re-opens exactly one.
+       `connect-src` is the one environment-specific entry — the page is served
+       on :8055 and the reference SEP-10 auth server on :4000, so 'self' alone
+       would break the handshake. A <meta> CSP cannot be templated per
+       environment, so dev origins are listed here and a real deployment must
+       edit them; see docs/tutorials/dapp-integration.md.
+       `frame-ancestors` is deliberately absent: browsers ignore it (along with
+       report-uri and sandbox) when the policy arrives via <meta>, so listing it
+       would buy nothing and log a console warning. Deployments should send
+       `frame-ancestors 'none'` as a real HTTP header — documented in the
+       tutorial alongside the connect-src edit. -->
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'none'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self'; img-src 'self' data:; connect-src 'self' http://localhost:4000; form-action 'none'; base-uri 'none'"
+  />
   <title>OrbitChain – Wallet Connect</title>
-  <style>
-    /* Theme tokens. Both palettes meet WCAG AA: body/label text >= 7:1,
-       button text >= 6:1, focus ring >= 3:1 against the surface it sits on. */
-    :root {
-      color-scheme: light dark;
-      --bg: #f0f4ff;
-      --card-bg: #ffffff;
-      --heading: #1a1a2e;
-      --text: #3d3d4d;
-      --muted: #575766;          /* 7.0:1 on --card-bg */
-      --accent: #4451d4;         /* 6.2:1 with white text */
-      --accent-hover: #333fb8;
-      --accent-text: #ffffff;
-      --focus-ring: #1a1a2e;     /* 15.9:1 on card, 14.5:1 on bg */
-      --error: #b3261e;          /* 6.6:1 on --card-bg */
-      --ok: #1b7a3d;             /* 4.9:1 on --card-bg */
-      --code-bg: #eef0f6;
-      --code-text: #1a1a2e;
-      --border: #9aa0b5;
-      --option-bg: #fafbff;
-      --option-border: #c9cde4;
-      --option-hover: #eef0ff;
-      --overlay: rgba(20, 20, 40, .45);
-    }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: #12141f;
-        --card-bg: #1e2130;
-        --heading: #f2f3fa;
-        --text: #d5d8e6;
-        --muted: #aab0c5;        /* 7.3:1 on --card-bg */
-        --accent: #a9b2ff;       /* 8.9:1 with dark text */
-        --accent-hover: #c2c9ff;
-        --accent-text: #12142b;
-        --focus-ring: #cfd5ff;   /* 10.4:1 on card */
-        --error: #ffb4ab;        /* 8.7:1 on --card-bg */
-        --ok: #7edb9a;           /* 9.3:1 on --card-bg */
-        --code-bg: #12141f;
-        --code-text: #e8eaf5;
-        --border: #6a7190;
-        --option-bg: #262a3d;
-        --option-border: #4a5070;
-        --option-hover: #303550;
-        --overlay: rgba(0, 0, 0, .6);
-      }
-    }
-
-    body {
-      font-family: sans-serif;
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      min-height: 100vh; margin: 0;
-      background: var(--bg); color: var(--text);
-    }
-    .card {
-      background: var(--card-bg); border-radius: 12px; padding: 2rem 2.5rem;
-      box-shadow: 0 4px 20px rgba(0,0,0,.15); text-align: center;
-      min-width: 320px; max-width: 90vw;
-    }
-    h1 { margin: 0 0 1.5rem; font-size: 1.4rem; color: var(--heading); }
-
-    button {
-      background: var(--accent); color: var(--accent-text);
-      border: 1px solid transparent; border-radius: 8px;
-      padding: .75rem 1.75rem; font-size: 1rem; cursor: pointer;
-    }
-    button:hover { background: var(--accent-hover); }
-    button[disabled] { opacity: .55; cursor: default; }
-    button.secondary {
-      background: transparent; color: var(--heading); border-color: var(--border);
-    }
-
-    /* Visible focus indicator (>= 3:1 against every surface it appears on). */
-    :focus-visible {
-      outline: 2px solid var(--focus-ring);
-      outline-offset: 2px;
-      border-radius: 4px;
-    }
-
-    /* Motion is opt-in: only animate for users who have not asked for reduced motion. */
-    @media (prefers-reduced-motion: no-preference) {
-      button { transition: background .2s, color .2s; }
-    }
-
-    @media (prefers-contrast: more) {
-      button { border-color: currentColor; }
-      :focus-visible { outline-width: 3px; }
-    }
-
-    #wallet-info { margin-top: 1.25rem; display: none; text-align: left; }
-    #wallet-info p { margin: .4rem 0; font-size: .9rem; }
-    .connected-flag { color: var(--ok); font-weight: 600; }
-    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); margin-right: 6px; }
-    #wallet-address {
-      font-family: monospace; font-size: .85rem; word-break: break-all;
-      background: var(--code-bg); color: var(--code-text);
-      padding: .5rem .75rem; border-radius: 6px; display: block;
-    }
-
-    /* Desktop manual-entry fallback (replaces the old window.prompt()). */
-    #manual-form { margin-top: 1.25rem; display: none; text-align: left; }
-    #manual-form label { display: block; font-size: .9rem; font-weight: 600; color: var(--heading); margin-bottom: .3rem; }
-    #manual-form .hint { font-size: .8rem; color: var(--muted); margin: 0 0 .5rem; }
-    #manual-address {
-      width: 100%; box-sizing: border-box; font-family: monospace; font-size: .85rem;
-      padding: .55rem .6rem; border: 1px solid var(--border); border-radius: 6px;
-      background: var(--card-bg); color: var(--text);
-    }
-    .form-actions { margin-top: .75rem; display: flex; gap: .5rem; }
-    .form-actions button { padding: .55rem 1.1rem; font-size: .9rem; }
-
-    #status { margin-top: .75rem; font-size: .9rem; color: var(--muted); min-height: 1.2em; }
-    #status.is-error { color: var(--error); font-weight: 600; }
-
-    /* Desktop multi-wallet chooser (issue #142) — inline in the card, NOT the
-       modal picker: the overlay dialog is reserved for the mobile deep-link
-       flow, and desktop UAs must never see it. */
-    #desktop-wallets { margin-top: 1.25rem; display: none; text-align: left; }
-    #desktop-wallets .chooser-title { font-size: .9rem; font-weight: 600; color: var(--heading); margin: 0 0 .5rem; }
-
-    /* Mobile wallet picker (modal dialog) */
-    #wallet-picker-overlay { display: none; position: fixed; inset: 0; background: var(--overlay); align-items: center; justify-content: center; padding: 1rem; z-index: 10; }
-    #wallet-picker-overlay.open { display: flex; }
-    #wallet-picker { background: var(--card-bg); border-radius: 12px; padding: 1.5rem; width: 320px; max-width: 100%; text-align: left; }
-    #wallet-picker h2 { margin: 0 0 .25rem; font-size: 1.1rem; color: var(--heading); }
-    #wallet-picker .hint { margin: 0 0 1rem; font-size: .8rem; color: var(--muted); }
-    .wallet-option { display: flex; align-items: center; gap: .6rem; width: 100%; padding: .65rem .75rem; margin-bottom: .5rem; border: 1px solid var(--option-border); border-radius: 8px; background: var(--option-bg); cursor: pointer; font-size: .95rem; color: var(--heading); }
-    .wallet-option:hover { background: var(--option-hover); border-color: var(--accent); }
-    .wallet-option .icon { font-size: 1.2rem; }
-    #pubkey-field { display: none; margin: .5rem 0 .75rem; }
-    #pubkey-field label { display: block; font-size: .85rem; font-weight: 600; color: var(--heading); margin-bottom: .3rem; }
-    #pubkey-input { width: 100%; box-sizing: border-box; padding: .6rem .7rem; border: 1px solid var(--border); border-radius: 8px; font-family: monospace; font-size: .82rem; background: var(--card-bg); color: var(--text); }
-    #wallet-picker-cancel { background: none; border: 1px solid transparent; color: var(--muted); font-size: .85rem; cursor: pointer; margin-top: .25rem; padding: .35rem .6rem; }
-    #wallet-picker-cancel:hover { color: var(--heading); background: none; }
-  </style>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/stellar-freighter-api/6.0.1/index.min.js" defer></script>
+  <link rel="stylesheet" href="wallet_connect.css" />
+  <!-- Freighter API, pinned by subresource integrity (issue #141). If cdnjs
+       ever serves different bytes the browser refuses to execute the script:
+       the page fails closed to manual entry rather than running unverified
+       third-party code. `crossorigin="anonymous"` is required for SRI on a
+       cross-origin script — cdnjs sends `Access-Control-Allow-Origin: *`, so
+       the request stays credential-free and succeeds. The hash is pinned again
+       in wallet_connect.test.js so a silent CDN change fails CI loudly. -->
+  <script
+    src="https://cdnjs.cloudflare.com/ajax/libs/stellar-freighter-api/6.0.1/index.min.js"
+    integrity="sha256-15dCnPl/mmfxmZkQgwqJ3AHVZa7euvtlGhGx7QA6fp0="
+    crossorigin="anonymous"
+    defer
+  ></script>
 </head>
 <body>
   <main class="card">
